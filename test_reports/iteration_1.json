@@ -1,0 +1,35 @@
+{
+  "summary": "First testing iteration of SoberBoard MVP. Backend pytest 25/25 passed including auth (register/login/me/logout), JWT cookie auth, listings filtering (city/zip/gender/pets/max_price/q), listing detail, listings/mine, create listing with 7-day expiry, soft-archive deactivate (DB record preserved, hidden from public list), reactivate restores active+expires_at, cross-user 403 on deactivate/reactivate, jobs/services/ads/reflection/stats. Frontend Playwright verified: landing page (hero, stats 35 beds/16 listings/16 cities/$0 fees, daily reflection, sponsored ads, CTA), beds directory with 16 listing cards + filters (Newport search filtered correctly), listing detail (no address, parking type only, manager phone, sidebar ads), JWT login redirects to /dashboard, dashboard shows 16 listings with Mark filled (deactivate) and Reactivate buttons working end-to-end, post-listing form (data-testid populated) creates listing and redirects to /beds/{id} detail, logout clears cookies and /dashboard redirects to /login, jobs/services/about pages render seeded content.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Landing hero stats", "issues": ["Hero stat shows '35 OPEN BEDS' but listings display total beds_open from active listings; cosmetic - confirm intent"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 658 lines and combines auth, listings, jobs, services, ads, seed data — consider splitting into routers/ (auth_router.py, listings_router.py, public_router.py) and seeds.py for maintainability if app grows.",
+    "Login lockout uses (ip:email) identifier with locked_until updated on EACH failure (resets the 15-minute window on every attempt) — minor but the lock effectively starts from the last attempt rather than from the 5th. Acceptable for MVP.",
+    "/api/listings filter logic: `q` and `max_price` both write to query['$or'] — supplying both at once will cause the second to overwrite the first (last-writer wins). Combine via $and if both filters need to coexist.",
+    "GET /api/listings/{id} returns inactive/expired listings publicly. Acceptable per the soft-archive design (so reactivate flow can fetch), but consider noting status to consumers.",
+    "Cookies use SameSite=None+Secure correctly for cross-site preview. Confirm prod parity.",
+    "Frontend AuthContext likely calls /auth/me on mount producing a 401 on every public page (visible as console errors). Not breaking but noisy — consider suppressing the 401 for the unauthenticated probe."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/__init__.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "manager@soberboard.com / manager123 (seed manager owning 15 listings); admin@soberboard.com / admin123",
+  "seed_data_creation": "No new persistent seed data. Test artifacts (TEST_* listings + test_* users) created during runs were cleaned up via mongosh after testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite at /app/backend/tests/backend_test.py — uses REACT_APP_BACKEND_URL from frontend/.env. Demo manager owns user_id=user_demo00manager. Soft-archive verified: deactivated listings still retrievable via GET /api/listings/{id} but excluded from GET /api/listings public list. Emergent Google OAuth (/api/auth/google/session) was NOT exercised end-to-end (no live session_id available); JWT path fully covered. Frontend logout uses an icon-only button (no data-testid) in the header — when writing future Playwright, locate via 'header button:last-child' or add data-testid='logout-button' for stability.",
+  "rca_of_the_issue": "No bugs found requiring RCA. Initial Playwright run showed login appearing not to redirect; root cause was test-side timing (button discovery before Dashboard listings finished loading). Adding wait_for_selector('button:has-text(Mark filled)') resolved the race and confirmed flow works."
+}

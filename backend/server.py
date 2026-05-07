@@ -1,89 +1,657 @@
-from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
-import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
-
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
+import os
+import uuid
+import logging
+import secrets
+import bcrypt
+import jwt
+import httpx
+from datetime import datetime, timezone, timedelta
+from typing import List, Optional
+
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, status
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field, EmailStr
+
+# --- DB ---
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
-app = FastAPI()
-
-# Create a router with the /api prefix
+# --- App ---
+app = FastAPI(title="SoberBoard API")
 api_router = APIRouter(prefix="/api")
 
+JWT_ALGORITHM = "HS256"
+JWT_ACCESS_MINUTES = 60 * 24  # 1 day for convenience
+JWT_REFRESH_DAYS = 7
+LISTING_DURATION_DAYS = 7
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# ============== AUTH HELPERS ==============
+def get_jwt_secret() -> str:
+    return os.environ["JWT_SECRET"]
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
+
+
+def create_access_token(user_id: str, email: str) -> str:
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_ACCESS_MINUTES),
+        "type": "access",
+    }
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+
+def create_refresh_token(user_id: str) -> str:
+    payload = {
+        "sub": user_id,
+        "exp": datetime.now(timezone.utc) + timedelta(days=JWT_REFRESH_DAYS),
+        "type": "refresh",
+    }
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+
+def set_jwt_cookies(response: Response, access: str, refresh: str):
+    # Cross-site cookies need SameSite=None + Secure (preview is https)
+    response.set_cookie("access_token", access, httponly=True, secure=True,
+                        samesite="none", max_age=JWT_ACCESS_MINUTES * 60, path="/")
+    response.set_cookie("refresh_token", refresh, httponly=True, secure=True,
+                        samesite="none", max_age=JWT_REFRESH_DAYS * 86400, path="/")
+
+
+def set_session_cookie(response: Response, session_token: str):
+    response.set_cookie("session_token", session_token, httponly=True, secure=True,
+                        samesite="none", max_age=7 * 86400, path="/")
+
+
+def clear_auth_cookies(response: Response):
+    for name in ("access_token", "refresh_token", "session_token"):
+        response.delete_cookie(name, path="/")
+
+
+async def get_current_user(request: Request) -> dict:
+    """Resolve user from either JWT access_token or Emergent session_token cookie/header."""
+    # 1. Try JWT
+    token = request.cookies.get("access_token")
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+    if token:
+        try:
+            payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+            if payload.get("type") == "access":
+                user = await db.users.find_one({"user_id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+                if user:
+                    return user
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+            pass
+
+    # 2. Try Emergent session
+    session_token = request.cookies.get("session_token")
+    if not session_token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            session_token = auth[7:]
+    if session_token:
+        sess = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+        if sess:
+            expires_at = sess["expires_at"]
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at >= datetime.now(timezone.utc):
+                user = await db.users.find_one({"user_id": sess["user_id"]}, {"_id": 0, "password_hash": 0})
+                if user:
+                    return user
+
+    raise HTTPException(status_code=401, detail="Not authenticated")
+
+
+# ============== MODELS ==============
+class RegisterIn(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserOut(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    role: str = "manager"
+    auth_provider: str = "password"
+    picture: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class ListingIn(BaseModel):
+    house_name: str
+    city: str
+    zip_code: str
+    beds_open: int = Field(ge=1, le=50)
+    price_weekly: Optional[float] = None
+    price_monthly: Optional[float] = None
+    people_per_room: int = Field(ge=1, le=8, default=2)
+    gender: str = "any"  # men, women, any, coed
+    pets_allowed: bool = False
+    pool: bool = False
+    parking: str = "street"  # street, driveway, garage, none
+    amenities: List[str] = []
+    description: str = ""
+    manager_name: str
+    manager_phone: str
+
+
+class ListingOut(ListingIn):
+    listing_id: str
+    user_id: str
+    status: str  # active | inactive | expired
+    created_at: str
+    updated_at: str
+    expires_at: str
+    image_url: Optional[str] = None
+
+
+# ============== AUTH ENDPOINTS ==============
+@api_router.post("/auth/register")
+async def register(body: RegisterIn, response: Response):
+    email = body.email.lower().strip()
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    user_doc = {
+        "user_id": user_id,
+        "email": email,
+        "name": body.name.strip(),
+        "password_hash": hash_password(body.password),
+        "role": "manager",
+        "auth_provider": "password",
+        "picture": None,
+        "phone": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(user_doc)
+    set_jwt_cookies(response, create_access_token(user_id, email), create_refresh_token(user_id))
+    user_doc.pop("password_hash", None)
+    user_doc.pop("_id", None)
+    return user_doc
+
+
+@api_router.post("/auth/login")
+async def login(body: LoginIn, response: Response, request: Request):
+    email = body.email.lower().strip()
+    ip = request.client.host if request.client else "unknown"
+    identifier = f"{ip}:{email}"
+    attempt = await db.login_attempts.find_one({"identifier": identifier})
+    if attempt and attempt.get("count", 0) >= 5:
+        locked_until = attempt.get("locked_until")
+        if locked_until and locked_until > datetime.now(timezone.utc).isoformat():
+            raise HTTPException(status_code=429, detail="Too many failed attempts. Try again later.")
+
+    user = await db.users.find_one({"email": email})
+    if not user or not user.get("password_hash") or not verify_password(body.password, user["password_hash"]):
+        await db.login_attempts.update_one(
+            {"identifier": identifier},
+            {"$inc": {"count": 1},
+             "$set": {"locked_until": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()}},
+            upsert=True,
+        )
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    await db.login_attempts.delete_one({"identifier": identifier})
+    set_jwt_cookies(response, create_access_token(user["user_id"], email), create_refresh_token(user["user_id"]))
+    user.pop("password_hash", None)
+    user.pop("_id", None)
+    return user
+
+
+@api_router.post("/auth/logout")
+async def logout(response: Response, request: Request):
+    session_token = request.cookies.get("session_token")
+    if session_token:
+        await db.user_sessions.delete_one({"session_token": session_token})
+    clear_auth_cookies(response)
+    return {"ok": True}
+
+
+@api_router.get("/auth/me")
+async def me(user: dict = Depends(get_current_user)):
+    return user
+
+
+@api_router.post("/auth/google/session")
+async def google_session(request: Request, response: Response):
+    """Process Emergent OAuth session_id and create app session."""
+    body = await request.json()
+    session_id = body.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    async with httpx.AsyncClient(timeout=10.0) as http:
+        r = await http.get(
+            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+            headers={"X-Session-ID": session_id},
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    data = r.json()
+    email = data["email"].lower().strip()
+    name = data.get("name") or email.split("@")[0]
+    picture = data.get("picture")
+    session_token = data["session_token"]
+
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        user_id = existing["user_id"]
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"name": name, "picture": picture, "auth_provider": existing.get("auth_provider", "google")}},
+        )
+    else:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": user_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+            "role": "manager",
+            "auth_provider": "google",
+            "phone": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    set_session_cookie(response, session_token)
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return user
+
+
+# ============== LISTINGS ==============
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _expiry_iso(days: int = LISTING_DURATION_DAYS):
+    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+
+
+async def _expire_stale():
+    now = _now_iso()
+    await db.listings.update_many(
+        {"status": "active", "expires_at": {"$lt": now}},
+        {"$set": {"status": "expired", "updated_at": now}},
+    )
+
+
+@api_router.get("/listings")
+async def list_listings(
+    city: Optional[str] = None,
+    zip_code: Optional[str] = None,
+    gender: Optional[str] = None,
+    pets: Optional[bool] = None,
+    max_price: Optional[float] = None,
+    q: Optional[str] = None,
+):
+    await _expire_stale()
+    query = {"status": "active"}
+    if city:
+        query["city"] = {"$regex": city, "$options": "i"}
+    if zip_code:
+        query["zip_code"] = zip_code
+    if gender and gender != "any":
+        query["gender"] = {"$in": [gender, "any", "coed"]}
+    if pets is True:
+        query["pets_allowed"] = True
+    if max_price is not None:
+        query["$or"] = [
+            {"price_weekly": {"$lte": max_price}},
+            {"price_monthly": {"$lte": max_price * 4}},
+        ]
+    if q:
+        query["$or"] = [
+            {"house_name": {"$regex": q, "$options": "i"}},
+            {"city": {"$regex": q, "$options": "i"}},
+            {"description": {"$regex": q, "$options": "i"}},
+        ]
+    items = await db.listings.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+
+@api_router.get("/listings/mine")
+async def my_listings(user: dict = Depends(get_current_user)):
+    await _expire_stale()
+    items = await db.listings.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+
+@api_router.get("/listings/{listing_id}")
+async def get_listing(listing_id: str):
+    await _expire_stale()
+    item = await db.listings.find_one({"listing_id": listing_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    return item
+
+
+@api_router.post("/listings")
+async def create_listing(body: ListingIn, user: dict = Depends(get_current_user)):
+    listing_id = f"lst_{uuid.uuid4().hex[:12]}"
+    doc = body.model_dump()
+    doc.update({
+        "listing_id": listing_id,
+        "user_id": user["user_id"],
+        "status": "active",
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+        "expires_at": _expiry_iso(),
+        "image_url": doc.get("image_url"),
+    })
+    await db.listings.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/listings/{listing_id}")
+async def update_listing(listing_id: str, body: ListingIn, user: dict = Depends(get_current_user)):
+    item = await db.listings.find_one({"listing_id": listing_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if item["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    update = body.model_dump()
+    update["updated_at"] = _now_iso()
+    await db.listings.update_one({"listing_id": listing_id}, {"$set": update})
+    return await db.listings.find_one({"listing_id": listing_id}, {"_id": 0})
+
+
+@api_router.post("/listings/{listing_id}/deactivate")
+async def deactivate_listing(listing_id: str, user: dict = Depends(get_current_user)):
+    item = await db.listings.find_one({"listing_id": listing_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if item["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    await db.listings.update_one(
+        {"listing_id": listing_id},
+        {"$set": {"status": "inactive", "updated_at": _now_iso()}},
+    )
+    return {"ok": True, "status": "inactive"}
+
+
+@api_router.post("/listings/{listing_id}/reactivate")
+async def reactivate_listing(listing_id: str, user: dict = Depends(get_current_user)):
+    item = await db.listings.find_one({"listing_id": listing_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if item["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    await db.listings.update_one(
+        {"listing_id": listing_id},
+        {"$set": {"status": "active", "updated_at": _now_iso(), "expires_at": _expiry_iso()}},
+    )
+    return {"ok": True, "status": "active", "expires_at": _expiry_iso()}
+
+
+# ============== JOBS ==============
+@api_router.get("/jobs")
+async def list_jobs(city: Optional[str] = None, q: Optional[str] = None):
+    query = {}
+    if city:
+        query["city"] = {"$regex": city, "$options": "i"}
+    if q:
+        query["$or"] = [
+            {"title": {"$regex": q, "$options": "i"}},
+            {"company": {"$regex": q, "$options": "i"}},
+        ]
+    return await db.jobs.find(query, {"_id": 0}).sort("posted_at", -1).to_list(200)
+
+
+# ============== SERVICES ==============
+@api_router.get("/services")
+async def list_services(category: Optional[str] = None):
+    query = {}
+    if category and category != "all":
+        query["category"] = category
+    return await db.services.find(query, {"_id": 0}).to_list(200)
+
+
+# ============== ADS ==============
+@api_router.get("/ads")
+async def list_ads(slot: Optional[str] = None, limit: int = 6):
+    query = {}
+    if slot:
+        query["slot"] = slot
+    return await db.ads.find(query, {"_id": 0}).limit(limit).to_list(limit)
+
+
+# ============== DAILY REFLECTION ==============
+REFLECTIONS = [
+    {"title": "Just for today", "body": "I will try to live through this day only, not tackle my whole life problem at once.", "source": "Just For Today"},
+    {"title": "One day at a time", "body": "Yesterday is history. Tomorrow is a mystery. Today is a gift.", "source": "Recovery wisdom"},
+    {"title": "Progress, not perfection", "body": "We claim spiritual progress rather than spiritual perfection.", "source": "Big Book"},
+    {"title": "Easy does it", "body": "Slow down. Recovery happens one breath at a time.", "source": "AA slogan"},
+    {"title": "First things first", "body": "Today, sobriety comes before everything else.", "source": "AA slogan"},
+    {"title": "Live and let live", "body": "I am responsible for my recovery, not yours. And that is enough.", "source": "AA slogan"},
+    {"title": "This too shall pass", "body": "No feeling is final. Sit with it. Breathe through it. Keep going.", "source": "Recovery wisdom"},
+]
+
+
+@api_router.get("/reflection/today")
+async def reflection_today():
+    idx = datetime.now(timezone.utc).timetuple().tm_yday % len(REFLECTIONS)
+    r = REFLECTIONS[idx]
+    return {**r, "date": datetime.now(timezone.utc).date().isoformat()}
+
+
+@api_router.get("/stats")
+async def stats():
+    await _expire_stale()
+    active = await db.listings.count_documents({"status": "active"})
+    cities = await db.listings.distinct("city", {"status": "active"})
+    beds = await db.listings.aggregate([
+        {"$match": {"status": "active"}},
+        {"$group": {"_id": None, "total": {"$sum": "$beds_open"}}},
+    ]).to_list(1)
+    total_beds = beds[0]["total"] if beds else 0
+    return {
+        "active_listings": active,
+        "total_open_beds": total_beds,
+        "cities_covered": len(cities),
+    }
+
+
+# ============== ROOT ==============
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"app": "SoberBoard", "ok": True}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+# ============== STARTUP / SEED ==============
+SEED_LISTINGS = [
+    {"house_name": "Garden Grove Sober House", "city": "Garden Grove", "zip_code": "92840", "beds_open": 2, "price_weekly": 175, "price_monthly": 700, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": True, "parking": "driveway", "amenities": ["Pool in backyard", "Plenty of parking", "Cable & WiFi", "Weekly house meetings"], "description": "Quiet 6-bed home in Garden Grove. Walking distance to AA meetings. House manager lives on-site.", "manager_name": "Marcus Reyes", "manager_phone": "(714) 555-0142", "image_url": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=900"},
+    {"house_name": "Costa Mesa Recovery Residence", "city": "Costa Mesa", "zip_code": "92626", "beds_open": 1, "price_weekly": 200, "price_monthly": 800, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Cable & WiFi", "Bike storage", "Bus line nearby"], "description": "3-man room available. Drug-tested house, structured environment, 12-step required.", "manager_name": "David Kim", "manager_phone": "(949) 555-0188", "image_url": "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900"},
+    {"house_name": "Huntington Hope House", "city": "Huntington Beach", "zip_code": "92647", "beds_open": 3, "price_weekly": 225, "price_monthly": 900, "people_per_room": 3, "gender": "women", "pets_allowed": True, "pool": True, "parking": "garage", "amenities": ["Pool", "Garage parking", "Pet friendly", "Surf gear storage"], "description": "Beautiful women's house 1 mile from the beach. Cats welcome, no dogs. Sponsor required.", "manager_name": "Janet Cole", "manager_phone": "(714) 555-0203", "image_url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=900"},
+    {"house_name": "Santa Ana Serenity", "city": "Santa Ana", "zip_code": "92704", "beds_open": 4, "price_weekly": 150, "price_monthly": 600, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Bus line", "Walk to meetings", "Furnished"], "description": "Affordable men's recovery home. Bilingual house, weekly meetings on-site.", "manager_name": "Carlos Mendez", "manager_phone": "(714) 555-0167", "image_url": "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=900"},
+    {"house_name": "Anaheim Anchor House", "city": "Anaheim", "zip_code": "92804", "beds_open": 2, "price_weekly": 185, "price_monthly": 740, "people_per_room": 2, "gender": "any", "pets_allowed": False, "pool": False, "parking": "driveway", "amenities": ["Driveway parking", "Laundry on-site", "Quiet street"], "description": "Co-ed sober living, separate floors by gender. 30-day minimum stay.", "manager_name": "Tasha Bell", "manager_phone": "(714) 555-0119", "image_url": "https://images.unsplash.com/photo-1602343168117-bb8ffe3e2e9f?w=900"},
+    {"house_name": "Fountain Valley Fellowship", "city": "Fountain Valley", "zip_code": "92708", "beds_open": 1, "price_weekly": 250, "price_monthly": 1000, "people_per_room": 1, "gender": "men", "pets_allowed": False, "pool": True, "parking": "garage", "amenities": ["Private room", "Pool", "Gym membership included"], "description": "Premium men's house. Private room available. Background screening required.", "manager_name": "Tom Whitaker", "manager_phone": "(714) 555-0299", "image_url": "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=900"},
+    {"house_name": "Westminster Way Home", "city": "Westminster", "zip_code": "92683", "beds_open": 2, "price_weekly": 165, "price_monthly": 660, "people_per_room": 3, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Walking distance to meetings", "Furnished"], "description": "3-man room. House manager 25+ years sober. Strong fellowship.", "manager_name": "Greg Yamamoto", "manager_phone": "(714) 555-0144", "image_url": "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=900"},
+    {"house_name": "Newport Coastal Living", "city": "Newport Beach", "zip_code": "92660", "beds_open": 1, "price_weekly": 350, "price_monthly": 1400, "people_per_room": 2, "gender": "women", "pets_allowed": True, "pool": True, "parking": "garage", "amenities": ["Pool", "Beach access", "Pet-friendly", "Yoga room"], "description": "Upscale women's recovery home. Wellness-focused programming.", "manager_name": "Erin Walsh", "manager_phone": "(949) 555-0277", "image_url": "https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=900"},
+    {"house_name": "Orange Hilltop House", "city": "Orange", "zip_code": "92867", "beds_open": 3, "price_weekly": 175, "price_monthly": 700, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": False, "parking": "driveway", "amenities": ["Big backyard", "BBQ", "Driveway parking"], "description": "Large 8-bed house with strong sober fellowship. Sponsor & meetings required.", "manager_name": "Ryan O'Connor", "manager_phone": "(714) 555-0186", "image_url": "https://images.unsplash.com/photo-1576941089067-2de3c901e126?w=900"},
+    {"house_name": "Irvine Renewal House", "city": "Irvine", "zip_code": "92614", "beds_open": 2, "price_weekly": 275, "price_monthly": 1100, "people_per_room": 2, "gender": "women", "pets_allowed": False, "pool": False, "parking": "garage", "amenities": ["Garage parking", "Quiet neighborhood", "Strong outpatient links"], "description": "Women's structured recovery home. IOP-friendly schedule. 30-day commitment.", "manager_name": "Michelle Tran", "manager_phone": "(949) 555-0155", "image_url": "https://images.unsplash.com/photo-1564078516393-cf04bd966897?w=900"},
+    {"house_name": "Long Beach Lighthouse", "city": "Long Beach", "zip_code": "90803", "beds_open": 2, "price_weekly": 195, "price_monthly": 780, "people_per_room": 2, "gender": "any", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Walk to beach", "Bus line", "Furnished"], "description": "Co-ed (separate floors) sober living near the beach. LGBTQ+ welcoming.", "manager_name": "Jordan Pierce", "manager_phone": "(562) 555-0211", "image_url": "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=900"},
+    {"house_name": "Mission Viejo Steady House", "city": "Mission Viejo", "zip_code": "92691", "beds_open": 1, "price_weekly": 220, "price_monthly": 880, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": True, "parking": "driveway", "amenities": ["Pool", "Hot tub", "Driveway parking"], "description": "Quiet, suburban men's recovery house with pool & hot tub. Working residents preferred.", "manager_name": "Sam Bradford", "manager_phone": "(949) 555-0233", "image_url": "https://images.unsplash.com/photo-1605114089527-de8e80d4c0b8?w=900"},
+    {"house_name": "Tustin New Beginnings", "city": "Tustin", "zip_code": "92780", "beds_open": 2, "price_weekly": 170, "price_monthly": 680, "people_per_room": 3, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Furnished", "Cable & WiFi", "Walking distance to meetings"], "description": "Affordable men's sober living. Clean, structured, drug tested.", "manager_name": "Andre Wilson", "manager_phone": "(714) 555-0122", "image_url": "https://images.unsplash.com/photo-1598228723793-52759bba239c?w=900"},
+    {"house_name": "Lake Forest Tranquility", "city": "Lake Forest", "zip_code": "92630", "beds_open": 3, "price_weekly": 200, "price_monthly": 800, "people_per_room": 2, "gender": "women", "pets_allowed": True, "pool": False, "parking": "driveway", "amenities": ["Pet-friendly", "Quiet neighborhood", "Furnished"], "description": "Cozy women's house. Small dogs and cats welcome. Strong sponsor culture.", "manager_name": "Linda Park", "manager_phone": "(949) 555-0188", "image_url": "https://images.unsplash.com/photo-1572120360610-d971b9d7767c?w=900"},
+    {"house_name": "Fullerton Foundation House", "city": "Fullerton", "zip_code": "92831", "beds_open": 4, "price_weekly": 160, "price_monthly": 640, "people_per_room": 4, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Furnished", "Cable & WiFi", "Bus line"], "description": "Entry-level pricing for men just leaving treatment. 30-day minimum, daily check-ins.", "manager_name": "Pete Saldana", "manager_phone": "(714) 555-0177", "image_url": "https://images.unsplash.com/photo-1599809275671-b5942cabc7a2?w=900"},
+]
 
-# Include the router in the main app
+SEED_JOBS = [
+    {"title": "Warehouse Associate", "company": "Reset Logistics", "city": "Anaheim", "type": "Full-time", "pay": "$20-$24/hr", "tags": ["No background check disqualifier", "Recovery friendly"], "description": "Pick & pack shifts. We hire from the recovery community and partner with local sober homes.", "contact": "hr@resetlogistics.example", "posted_at": "2026-02-01"},
+    {"title": "Line Cook", "company": "Second Chance Kitchen", "city": "Costa Mesa", "type": "Full-time", "pay": "$22/hr + tips", "tags": ["Felony friendly", "On-the-job training"], "description": "Fast-paced kitchen run by people in long-term recovery. We get it.", "contact": "kitchen@secondchance.example", "posted_at": "2026-02-03"},
+    {"title": "Construction Apprentice", "company": "Anchor Builders", "city": "Santa Ana", "type": "Full-time", "pay": "$25-$30/hr", "tags": ["Union path", "Drug screen at hire"], "description": "Apprenticeship program. We sponsor people coming out of treatment with strong references.", "contact": "jobs@anchorbuilders.example", "posted_at": "2026-02-04"},
+    {"title": "Peer Support Specialist", "company": "Coastal Recovery Center", "city": "Huntington Beach", "type": "Full-time", "pay": "$24-$28/hr", "tags": ["Lived experience required", "Benefits"], "description": "Must have 1+ year continuous sobriety. Help others walk the path.", "contact": "careers@coastalrecovery.example", "posted_at": "2026-02-05"},
+    {"title": "Dispatcher", "company": "Greenline Movers", "city": "Garden Grove", "type": "Full-time", "pay": "$23/hr", "tags": ["Recovery friendly", "Flex hours"], "description": "Dispatch & customer calls. Must be reliable. We accommodate court & treatment schedules.", "contact": "dispatch@greenline.example", "posted_at": "2026-02-06"},
+    {"title": "Retail Sales Associate", "company": "OC Surf Outfitters", "city": "Newport Beach", "type": "Part-time", "pay": "$18/hr + commission", "tags": ["Flexible", "Recovery friendly"], "description": "Part-time retail. Great for someone working a program with daytime IOP.", "contact": "stores@ocsurf.example", "posted_at": "2026-02-07"},
+    {"title": "HVAC Helper", "company": "Reliable Air OC", "city": "Orange", "type": "Full-time", "pay": "$22-$26/hr", "tags": ["Trade school stipend", "Drug-free workplace"], "description": "Learn the trade. We pay for HVAC certification after 90 days clean & on time.", "contact": "hr@reliableair.example", "posted_at": "2026-02-08"},
+    {"title": "Detail Tech", "company": "Pacific Auto Detail", "city": "Costa Mesa", "type": "Full-time", "pay": "$20/hr + tips", "tags": ["Felony friendly", "Cash tips daily"], "description": "Auto detailing crew. We hire directly from sober houses every quarter.", "contact": "owner@pacificdetail.example", "posted_at": "2026-02-08"},
+    {"title": "Caregiver / Home Health Aide", "company": "Steady Hands Care", "city": "Westminster", "type": "Full-time", "pay": "$21-$24/hr", "tags": ["Background check", "Cert provided"], "description": "Compassionate caregivers wanted. Background must be 5+ years clean of violent or financial felonies.", "contact": "care@steadyhands.example", "posted_at": "2026-02-09"},
+    {"title": "Landscaper", "company": "Rooted Lawn Co.", "city": "Anaheim", "type": "Full-time", "pay": "$19-$22/hr", "tags": ["Recovery friendly", "Outdoor work"], "description": "Crew leader and laborer roles. Owner is 11 years sober. Honest pay, honest work.", "contact": "hello@rootedlawn.example", "posted_at": "2026-02-10"},
+]
+
+SEED_SERVICES = [
+    {"name": "Marshall & Ortiz Defense", "category": "DUI / Criminal Defense", "city": "Santa Ana", "phone": "(714) 555-0410", "url": "#", "description": "DUI, drug possession, sober-living friendly fee plans.", "tags": ["DUI", "Possession", "Free consult"]},
+    {"name": "Clean Slate Expungement Clinic", "category": "Expungement", "city": "Garden Grove", "phone": "(714) 555-0421", "url": "#", "description": "Sliding-scale expungement help. 1203.4 PC and felony reduction.", "tags": ["Expungement", "Sliding scale"]},
+    {"name": "Pacific Behavioral Health", "category": "Mental Health", "city": "Costa Mesa", "phone": "(949) 555-0432", "url": "#", "description": "Dual-diagnosis psychiatry, Medi-Cal accepted, evening hours.", "tags": ["Psychiatry", "Medi-Cal", "Dual diagnosis"]},
+    {"name": "OC Insurance Navigators", "category": "Insurance", "city": "Anaheim", "phone": "(714) 555-0443", "url": "#", "description": "Free help enrolling in Covered California, Medi-Cal, and Medicare.", "tags": ["Free", "Bilingual"]},
+    {"name": "Bridge Food Pantry", "category": "Food / Basic Needs", "city": "Santa Ana", "phone": "(714) 555-0454", "url": "#", "description": "No-questions-asked groceries 3x/week. ID not required.", "tags": ["Food", "No ID required"]},
+    {"name": "Second Wind Counseling", "category": "Mental Health", "city": "Huntington Beach", "phone": "(714) 555-0465", "url": "#", "description": "LMFTs in long-term recovery. Sliding scale $40-$120.", "tags": ["Therapy", "Sliding scale"]},
+    {"name": "Lopez Immigration Law", "category": "Immigration", "city": "Santa Ana", "phone": "(714) 555-0476", "url": "#", "description": "Recovery-friendly immigration counsel. Hablamos español.", "tags": ["Immigration", "Spanish"]},
+    {"name": "OC DMV Reinstatement Help", "category": "DMV / License", "city": "Westminster", "phone": "(714) 555-0487", "url": "#", "description": "Help getting your license back after DUI. SR-22 referrals.", "tags": ["DMV", "SR-22"]},
+    {"name": "Rooted Workforce Center", "category": "Employment", "city": "Anaheim", "phone": "(714) 555-0498", "url": "#", "description": "Resume + interview prep. Direct placement with felony-friendly employers.", "tags": ["Resume", "Placement"]},
+    {"name": "Family Bridge Mediation", "category": "Family Law", "city": "Orange", "phone": "(714) 555-0509", "url": "#", "description": "Custody & family mediation for parents in early recovery.", "tags": ["Family", "Mediation"]},
+]
+
+SEED_ADS = [
+    {"ad_id": "ad_dui_1", "slot": "sidebar", "category": "Legal", "title": "Charged with a DUI?", "subtitle": "Marshall & Ortiz Defense — first consult free", "cta": "Call (714) 555-0410", "color": "#2B4C5F"},
+    {"ad_id": "ad_ins_1", "slot": "sidebar", "category": "Insurance", "title": "Treatment without insurance?", "subtitle": "OC Insurance Navigators — free Medi-Cal enrollment", "cta": "Get free help", "color": "#5E7B62"},
+    {"ad_id": "ad_car_1", "slot": "inline", "category": "Auto", "title": "Need a car after rehab?", "subtitle": "Sunset Auto — credit-friendly, recovery-aware", "cta": "Browse inventory", "color": "#C26D53"},
+    {"ad_id": "ad_treat_1", "slot": "inline", "category": "Treatment", "title": "Coastal Recovery Center", "subtitle": "Outpatient programs that work with sober living schedules", "cta": "Tour the center", "color": "#2B4C5F"},
+    {"ad_id": "ad_food_1", "slot": "sidebar", "category": "Food", "title": "Bridge Food Pantry", "subtitle": "Free groceries 3x/week. No ID required.", "cta": "See hours", "color": "#5E7B62"},
+    {"ad_id": "ad_mental_1", "slot": "inline", "category": "Mental Health", "title": "Talk to someone who gets it", "subtitle": "Second Wind Counseling — sliding scale $40-$120", "cta": "Book a session", "color": "#D4A373"},
+]
+
+
+@app.on_event("startup")
+async def on_startup():
+    # Indexes
+    await db.users.create_index("email", unique=True)
+    await db.users.create_index("user_id", unique=True)
+    await db.user_sessions.create_index("session_token", unique=True)
+    await db.user_sessions.create_index("user_id")
+    await db.listings.create_index("listing_id", unique=True)
+    await db.listings.create_index("user_id")
+    await db.listings.create_index("city")
+    await db.listings.create_index("zip_code")
+    await db.listings.create_index("status")
+    await db.login_attempts.create_index("identifier")
+
+    # Admin seeding
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@soberboard.com").lower()
+    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    admin = await db.users.find_one({"email": admin_email})
+    if not admin:
+        await db.users.insert_one({
+            "user_id": "user_admin0001",
+            "email": admin_email,
+            "name": "SoberBoard Admin",
+            "password_hash": hash_password(admin_password),
+            "role": "admin",
+            "auth_provider": "password",
+            "picture": None,
+            "phone": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    elif not verify_password(admin_password, admin.get("password_hash", "")):
+        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
+
+    # Demo manager
+    demo_email = "manager@soberboard.com"
+    demo = await db.users.find_one({"email": demo_email})
+    if not demo:
+        await db.users.insert_one({
+            "user_id": "user_demo00manager",
+            "email": demo_email,
+            "name": "Marcus Reyes",
+            "password_hash": hash_password("manager123"),
+            "role": "manager",
+            "auth_provider": "password",
+            "picture": None,
+            "phone": "(714) 555-0142",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # Seed listings
+    if await db.listings.count_documents({}) == 0:
+        for s in SEED_LISTINGS:
+            doc = {
+                **s,
+                "listing_id": f"lst_{uuid.uuid4().hex[:12]}",
+                "user_id": "user_demo00manager",
+                "status": "active",
+                "created_at": _now_iso(),
+                "updated_at": _now_iso(),
+                "expires_at": _expiry_iso(),
+            }
+            await db.listings.insert_one(doc)
+
+    # Seed jobs
+    if await db.jobs.count_documents({}) == 0:
+        for j in SEED_JOBS:
+            await db.jobs.insert_one({**j, "job_id": f"job_{uuid.uuid4().hex[:10]}"})
+
+    # Seed services
+    if await db.services.count_documents({}) == 0:
+        for s in SEED_SERVICES:
+            await db.services.insert_one({**s, "service_id": f"svc_{uuid.uuid4().hex[:10]}"})
+
+    # Seed ads
+    if await db.ads.count_documents({}) == 0:
+        for a in SEED_ADS:
+            await db.ads.insert_one(a)
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    client.close()
+
+
+# Mount router & CORS
 app.include_router(api_router)
+
+# CORS - allow credentials with explicit frontend origin
+frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+preview_url = "https://recovery-beds.preview.emergentagent.com"
+allowed_origins = list({frontend_url, preview_url, "http://localhost:3000"})
 
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("soberboard")
