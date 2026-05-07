@@ -23,6 +23,18 @@ Make finding a safe place to live in recovery as simple as searching for an apar
 - Revenue model: business ads only
 
 ## What's Been Implemented (2026-02-07)
+### Region expansion (2026-02-07 update)
+- Backend: `state` + `region` fields on listings; auto-inferred from city/zip via `infer_region()` helper covering OC, LA County, San Diego, Inland Empire, Phoenix Metro, Tucson
+- Backend: `/api/regions` endpoint returns live region breakdown (state, region, listings, beds)
+- Backend: `/api/listings` supports `state` and `region` filter params; `q` now also matches region and zip prefix
+- Backend: `/api/stats` returns `regions_covered` and `states_covered`
+- Backend: backfill migration on startup sets state/region on any pre-existing rows missing them; new region seeds (LA, SD, IE, AZ) auto-added
+- Frontend: Landing has new "Where we are" section with clickable region cards; hero stats now show regions + states
+- Frontend: Beds Directory has region filter chips at the top; cards show region in overline
+- Frontend: Listing Detail shows region in overline; Post Listing has state selector
+- Frontend: Footer/About copy updated from "Orange County only" to "California, expanding nationwide"
+- 24 active listings now span: Orange County (14), LA County (4), San Diego (2), Inland Empire (2), Phoenix Metro AZ (2)
+
 ### Backend (FastAPI + MongoDB)
 - Auth: register, login, logout, /me, refresh — JWT httpOnly cookies (access + refresh)
 - Auth: Emergent Google OAuth callback `/api/auth/google/session` — both paths resolve through unified `get_current_user`

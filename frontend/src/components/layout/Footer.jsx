@@ -14,7 +14,7 @@ export default function Footer() {
             The free MLS for sober living homes. Built by and for the recovery community —
             no listing fees, no signup costs, no addresses ever published.
           </p>
-          <p className="sb-overline mt-6">Built in Orange County, CA</p>
+          <p className="sb-overline mt-6">Built in California · expanding nationwide</p>
         </div>
 
         <div className="md:col-span-2">

@@ -152,6 +152,8 @@ class UserOut(BaseModel):
 class ListingIn(BaseModel):
     house_name: str
     city: str
+    state: str = "CA"
+    region: str = "Orange County"
     zip_code: str
     beds_open: int = Field(ge=1, le=50)
     price_weekly: Optional[float] = None
@@ -317,6 +319,8 @@ async def _expire_stale():
 @api_router.get("/listings")
 async def list_listings(
     city: Optional[str] = None,
+    state: Optional[str] = None,
+    region: Optional[str] = None,
     zip_code: Optional[str] = None,
     gender: Optional[str] = None,
     pets: Optional[bool] = None,
@@ -324,28 +328,48 @@ async def list_listings(
     q: Optional[str] = None,
 ):
     await _expire_stale()
-    query = {"status": "active"}
+    and_clauses = [{"status": "active"}]
     if city:
-        query["city"] = {"$regex": city, "$options": "i"}
+        and_clauses.append({"city": {"$regex": city, "$options": "i"}})
+    if state:
+        and_clauses.append({"state": state.upper()})
+    if region:
+        and_clauses.append({"region": {"$regex": region, "$options": "i"}})
     if zip_code:
-        query["zip_code"] = zip_code
+        and_clauses.append({"zip_code": zip_code})
     if gender and gender != "any":
-        query["gender"] = {"$in": [gender, "any", "coed"]}
+        and_clauses.append({"gender": {"$in": [gender, "any", "coed"]}})
     if pets is True:
-        query["pets_allowed"] = True
+        and_clauses.append({"pets_allowed": True})
     if max_price is not None:
-        query["$or"] = [
+        and_clauses.append({"$or": [
             {"price_weekly": {"$lte": max_price}},
             {"price_monthly": {"$lte": max_price * 4}},
-        ]
+        ]})
     if q:
-        query["$or"] = [
+        and_clauses.append({"$or": [
             {"house_name": {"$regex": q, "$options": "i"}},
             {"city": {"$regex": q, "$options": "i"}},
+            {"region": {"$regex": q, "$options": "i"}},
             {"description": {"$regex": q, "$options": "i"}},
-        ]
+            {"zip_code": {"$regex": f"^{q}", "$options": "i"}},
+        ]})
+    query = {"$and": and_clauses} if len(and_clauses) > 1 else and_clauses[0]
     items = await db.listings.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
+
+
+@api_router.get("/regions")
+async def list_regions():
+    """Distinct (state, region) pairs across active listings — for filter UIs."""
+    await _expire_stale()
+    pipeline = [
+        {"$match": {"status": "active"}},
+        {"$group": {"_id": {"state": "$state", "region": "$region"}, "count": {"$sum": 1}, "beds": {"$sum": "$beds_open"}}},
+        {"$sort": {"count": -1}},
+    ]
+    rows = await db.listings.aggregate(pipeline).to_list(100)
+    return [{"state": r["_id"]["state"], "region": r["_id"]["region"], "listings": r["count"], "beds": r["beds"]} for r in rows]
 
 
 @api_router.get("/listings/mine")
@@ -368,6 +392,12 @@ async def get_listing(listing_id: str):
 async def create_listing(body: ListingIn, user: dict = Depends(get_current_user)):
     listing_id = f"lst_{uuid.uuid4().hex[:12]}"
     doc = body.model_dump()
+    # Backfill state/region from zip/city if the operator left defaults
+    if not doc.get("region") or doc.get("region") == "Orange County":
+        inferred_state, inferred_region = infer_region(doc.get("city", ""), doc.get("zip_code", ""))
+        if not doc.get("state") or doc.get("state") == "CA":
+            doc["state"] = inferred_state
+        doc["region"] = inferred_region
     doc.update({
         "listing_id": listing_id,
         "user_id": user["user_id"],
@@ -479,6 +509,8 @@ async def stats():
     await _expire_stale()
     active = await db.listings.count_documents({"status": "active"})
     cities = await db.listings.distinct("city", {"status": "active"})
+    states = await db.listings.distinct("state", {"status": "active"})
+    regions = await db.listings.distinct("region", {"status": "active"})
     beds = await db.listings.aggregate([
         {"$match": {"status": "active"}},
         {"$group": {"_id": None, "total": {"$sum": "$beds_open"}}},
@@ -488,6 +520,8 @@ async def stats():
         "active_listings": active,
         "total_open_beds": total_beds,
         "cities_covered": len(cities),
+        "regions_covered": len(regions),
+        "states_covered": len(states),
     }
 
 
@@ -498,6 +532,63 @@ async def root():
 
 
 # ============== STARTUP / SEED ==============
+# Region inference for backfill — keeps existing OC seed data intact while
+# letting us expand to LA, San Diego, Inland Empire, and other states.
+ZIP_TO_REGION = {
+    # Orange County
+    "92840": ("CA", "Orange County"), "92626": ("CA", "Orange County"),
+    "92647": ("CA", "Orange County"), "92704": ("CA", "Orange County"),
+    "92804": ("CA", "Orange County"), "92708": ("CA", "Orange County"),
+    "92683": ("CA", "Orange County"), "92660": ("CA", "Orange County"),
+    "92867": ("CA", "Orange County"), "92614": ("CA", "Orange County"),
+    "92780": ("CA", "Orange County"), "92691": ("CA", "Orange County"),
+    "92630": ("CA", "Orange County"), "92831": ("CA", "Orange County"),
+    # Los Angeles County
+    "90803": ("CA", "Los Angeles County"), "90250": ("CA", "Los Angeles County"),
+    "90802": ("CA", "Los Angeles County"), "91101": ("CA", "Los Angeles County"),
+    "90404": ("CA", "Los Angeles County"), "90291": ("CA", "Los Angeles County"),
+    # San Diego
+    "92101": ("CA", "San Diego"), "92103": ("CA", "San Diego"),
+    "92054": ("CA", "San Diego"), "92021": ("CA", "San Diego"),
+    # Inland Empire
+    "92501": ("CA", "Inland Empire"), "92410": ("CA", "Inland Empire"),
+    "92335": ("CA", "Inland Empire"), "92223": ("CA", "Inland Empire"),
+    # Arizona (proves we're cross-state)
+    "85016": ("AZ", "Phoenix Metro"), "85281": ("AZ", "Phoenix Metro"),
+    "85701": ("AZ", "Tucson"),
+}
+
+CITY_TO_REGION = {
+    # OC
+    "garden grove": ("CA", "Orange County"), "costa mesa": ("CA", "Orange County"),
+    "huntington beach": ("CA", "Orange County"), "santa ana": ("CA", "Orange County"),
+    "anaheim": ("CA", "Orange County"), "fountain valley": ("CA", "Orange County"),
+    "westminster": ("CA", "Orange County"), "newport beach": ("CA", "Orange County"),
+    "orange": ("CA", "Orange County"), "irvine": ("CA", "Orange County"),
+    "tustin": ("CA", "Orange County"), "mission viejo": ("CA", "Orange County"),
+    "lake forest": ("CA", "Orange County"), "fullerton": ("CA", "Orange County"),
+    # LA
+    "long beach": ("CA", "Los Angeles County"), "pasadena": ("CA", "Los Angeles County"),
+    "los angeles": ("CA", "Los Angeles County"), "santa monica": ("CA", "Los Angeles County"),
+    "venice": ("CA", "Los Angeles County"), "hawthorne": ("CA", "Los Angeles County"),
+    # SD
+    "san diego": ("CA", "San Diego"), "oceanside": ("CA", "San Diego"),
+    "el cajon": ("CA", "San Diego"),
+    # IE
+    "riverside": ("CA", "Inland Empire"), "san bernardino": ("CA", "Inland Empire"),
+    "fontana": ("CA", "Inland Empire"), "beaumont": ("CA", "Inland Empire"),
+    # AZ
+    "phoenix": ("AZ", "Phoenix Metro"), "tempe": ("AZ", "Phoenix Metro"),
+    "tucson": ("AZ", "Tucson"),
+}
+
+
+def infer_region(city: str, zip_code: str) -> tuple:
+    if zip_code in ZIP_TO_REGION:
+        return ZIP_TO_REGION[zip_code]
+    return CITY_TO_REGION.get((city or "").strip().lower(), ("CA", "Other"))
+
+
 SEED_LISTINGS = [
     {"house_name": "Garden Grove Sober House", "city": "Garden Grove", "zip_code": "92840", "beds_open": 2, "price_weekly": 175, "price_monthly": 700, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": True, "parking": "driveway", "amenities": ["Pool in backyard", "Plenty of parking", "Cable & WiFi", "Weekly house meetings"], "description": "Quiet 6-bed home in Garden Grove. Walking distance to AA meetings. House manager lives on-site.", "manager_name": "Marcus Reyes", "manager_phone": "(714) 555-0142", "image_url": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=900"},
     {"house_name": "Costa Mesa Recovery Residence", "city": "Costa Mesa", "zip_code": "92626", "beds_open": 1, "price_weekly": 200, "price_monthly": 800, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Cable & WiFi", "Bike storage", "Bus line nearby"], "description": "3-man room available. Drug-tested house, structured environment, 12-step required.", "manager_name": "David Kim", "manager_phone": "(949) 555-0188", "image_url": "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900"},
@@ -514,6 +605,19 @@ SEED_LISTINGS = [
     {"house_name": "Tustin New Beginnings", "city": "Tustin", "zip_code": "92780", "beds_open": 2, "price_weekly": 170, "price_monthly": 680, "people_per_room": 3, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Furnished", "Cable & WiFi", "Walking distance to meetings"], "description": "Affordable men's sober living. Clean, structured, drug tested.", "manager_name": "Andre Wilson", "manager_phone": "(714) 555-0122", "image_url": "https://images.unsplash.com/photo-1598228723793-52759bba239c?w=900"},
     {"house_name": "Lake Forest Tranquility", "city": "Lake Forest", "zip_code": "92630", "beds_open": 3, "price_weekly": 200, "price_monthly": 800, "people_per_room": 2, "gender": "women", "pets_allowed": True, "pool": False, "parking": "driveway", "amenities": ["Pet-friendly", "Quiet neighborhood", "Furnished"], "description": "Cozy women's house. Small dogs and cats welcome. Strong sponsor culture.", "manager_name": "Linda Park", "manager_phone": "(949) 555-0188", "image_url": "https://images.unsplash.com/photo-1572120360610-d971b9d7767c?w=900"},
     {"house_name": "Fullerton Foundation House", "city": "Fullerton", "zip_code": "92831", "beds_open": 4, "price_weekly": 160, "price_monthly": 640, "people_per_room": 4, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Furnished", "Cable & WiFi", "Bus line"], "description": "Entry-level pricing for men just leaving treatment. 30-day minimum, daily check-ins.", "manager_name": "Pete Saldana", "manager_phone": "(714) 555-0177", "image_url": "https://images.unsplash.com/photo-1599809275671-b5942cabc7a2?w=900"},
+    # ---- Los Angeles County ----
+    {"house_name": "Long Beach Lighthouse North", "city": "Long Beach", "zip_code": "90802", "beds_open": 3, "price_weekly": 200, "price_monthly": 800, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Walk to meetings", "Bus line", "Furnished"], "description": "Men's house steps from downtown Long Beach. Strong outpatient links.", "manager_name": "Daryl King", "manager_phone": "(562) 555-0288", "image_url": "https://images.unsplash.com/photo-1542621334-a254cf47733d?w=900"},
+    {"house_name": "Pasadena Reset Home", "city": "Pasadena", "zip_code": "91101", "beds_open": 2, "price_weekly": 240, "price_monthly": 960, "people_per_room": 2, "gender": "women", "pets_allowed": True, "pool": False, "parking": "driveway", "amenities": ["Pet-friendly", "Quiet street", "Yoga in living room"], "description": "Women's recovery home in old Pasadena. Strong AA fellowship and IOP partners.", "manager_name": "Anne Daniels", "manager_phone": "(626) 555-0190", "image_url": "https://images.unsplash.com/photo-1601565415267-724db0e98c5d?w=900"},
+    {"house_name": "Venice Sands Sober Living", "city": "Venice", "zip_code": "90291", "beds_open": 1, "price_weekly": 325, "price_monthly": 1300, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Walk to beach", "Bike storage", "Surfboard rack"], "description": "Westside men's house. Wellness-leaning. Close to Venice and Santa Monica meetings.", "manager_name": "Kyle Brennan", "manager_phone": "(310) 555-0344", "image_url": "https://images.unsplash.com/photo-1568092775865-66b5b16ec5c5?w=900"},
+    # ---- San Diego ----
+    {"house_name": "Hillcrest Hope House", "city": "San Diego", "zip_code": "92103", "beds_open": 2, "price_weekly": 220, "price_monthly": 880, "people_per_room": 2, "gender": "any", "pets_allowed": True, "pool": False, "parking": "street", "amenities": ["LGBTQ+ welcoming", "Walk to meetings", "Pet-friendly"], "description": "Co-ed (separate floors) recovery home in Hillcrest. Strong LGBTQ+ recovery community.", "manager_name": "Robin Aguirre", "manager_phone": "(619) 555-0432", "image_url": "https://images.unsplash.com/photo-1581993192873-bf6d9b6b7f0a?w=900"},
+    {"house_name": "Oceanside Anchor", "city": "Oceanside", "zip_code": "92054", "beds_open": 4, "price_weekly": 175, "price_monthly": 700, "people_per_room": 3, "gender": "men", "pets_allowed": False, "pool": False, "parking": "driveway", "amenities": ["Veterans welcome", "Bus line", "Walk to beach"], "description": "Men's house near Camp Pendleton. Veterans and active recovery encouraged.", "manager_name": "Dean Holcomb", "manager_phone": "(760) 555-0228", "image_url": "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=900"},
+    # ---- Inland Empire ----
+    {"house_name": "Riverside Renewal", "city": "Riverside", "zip_code": "92501", "beds_open": 3, "price_weekly": 145, "price_monthly": 580, "people_per_room": 3, "gender": "men", "pets_allowed": False, "pool": False, "parking": "driveway", "amenities": ["Affordable", "Furnished", "Bus line"], "description": "Affordable men's recovery in downtown Riverside. Bilingual house.", "manager_name": "Hector Rivas", "manager_phone": "(951) 555-0162", "image_url": "https://images.unsplash.com/photo-1598228723793-52759bba239c?w=900"},
+    {"house_name": "San Bernardino Bridge House", "city": "San Bernardino", "zip_code": "92410", "beds_open": 2, "price_weekly": 140, "price_monthly": 560, "people_per_room": 4, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Affordable", "Furnished", "Walk to meetings"], "description": "Entry-level men's recovery home. Court-card signing, drug tested.", "manager_name": "Rico Salazar", "manager_phone": "(909) 555-0211", "image_url": "https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=900"},
+    # ---- Arizona — proves we go beyond California ----
+    {"house_name": "Phoenix Sun Recovery", "city": "Phoenix", "zip_code": "85016", "beds_open": 3, "price_weekly": 165, "price_monthly": 660, "people_per_room": 2, "gender": "any", "pets_allowed": False, "pool": True, "parking": "garage", "amenities": ["Pool", "AC", "Garage parking", "Bus line"], "description": "Co-ed Phoenix recovery home (separate floors). 100+ AA meetings within 3 miles.", "manager_name": "Brett Donovan", "manager_phone": "(602) 555-0133", "image_url": "https://images.unsplash.com/photo-1564013434775-f71db0030976?w=900"},
+    {"house_name": "Tempe Trailhead House", "city": "Tempe", "zip_code": "85281", "beds_open": 2, "price_weekly": 175, "price_monthly": 700, "people_per_room": 2, "gender": "women", "pets_allowed": True, "pool": True, "parking": "driveway", "amenities": ["Pool", "Pet-friendly", "Light rail nearby", "ASU close"], "description": "Women's recovery near ASU. Great for residents working or in school.", "manager_name": "Maya Singh", "manager_phone": "(480) 555-0177", "image_url": "https://images.unsplash.com/photo-1600585154084-4e5fe7c39198?w=900"},
 ]
 
 SEED_JOBS = [
@@ -601,11 +705,14 @@ async def on_startup():
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
-    # Seed listings
+    # Seed listings + backfill state/region for any existing rows
     if await db.listings.count_documents({}) == 0:
         for s in SEED_LISTINGS:
+            state, region = infer_region(s["city"], s["zip_code"])
             doc = {
                 **s,
+                "state": s.get("state", state),
+                "region": s.get("region", region),
                 "listing_id": f"lst_{uuid.uuid4().hex[:12]}",
                 "user_id": "user_demo00manager",
                 "status": "active",
@@ -614,6 +721,28 @@ async def on_startup():
                 "expires_at": _expiry_iso(),
             }
             await db.listings.insert_one(doc)
+    else:
+        # Backfill missing state/region on previously-seeded rows
+        async for row in db.listings.find({"$or": [{"state": {"$exists": False}}, {"region": {"$exists": False}}]}, {"_id": 0, "listing_id": 1, "city": 1, "zip_code": 1}):
+            state, region = infer_region(row.get("city", ""), row.get("zip_code", ""))
+            await db.listings.update_one({"listing_id": row["listing_id"]}, {"$set": {"state": state, "region": region}})
+        # Seed any new region listings that aren't yet in the DB (matched by house_name)
+        existing_names = set(await db.listings.distinct("house_name"))
+        for s in SEED_LISTINGS:
+            if s["house_name"] in existing_names:
+                continue
+            state, region = infer_region(s["city"], s["zip_code"])
+            await db.listings.insert_one({
+                **s,
+                "state": s.get("state", state),
+                "region": s.get("region", region),
+                "listing_id": f"lst_{uuid.uuid4().hex[:12]}",
+                "user_id": "user_demo00manager",
+                "status": "active",
+                "created_at": _now_iso(),
+                "updated_at": _now_iso(),
+                "expires_at": _expiry_iso(),
+            })
 
     # Seed jobs
     if await db.jobs.count_documents({}) == 0:

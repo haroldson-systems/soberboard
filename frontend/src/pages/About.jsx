@@ -24,9 +24,10 @@ export default function About() {
           SoberBoard isn't a treatment center pitching beds. It's the open board your sponsor would have
           wanted on day one of your fourth attempt. Real names, real phone numbers, no funnels.
         </Block>
-        <Block icon={<MapPinned size={20} strokeWidth={1.6}/>} title="Hyper-local first">
-          Starting in Orange County — ground zero for sober living. Once we're the trusted board here,
-          we expand state by state.
+        <Block icon={<MapPinned size={20} strokeWidth={1.6}/>} title="Hyper-local first, then everywhere">
+          We started in Orange County — ground zero for sober living. We're now live across LA County,
+          San Diego, the Inland Empire, and beyond California. Once we're trusted in a region, we double down.
+          Eventually: every state, every county.
         </Block>
       </div>
 

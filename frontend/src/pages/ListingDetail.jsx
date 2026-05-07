@@ -38,9 +38,9 @@ export default function ListingDetail() {
           </div>
 
           <div className="mt-8">
-            <p className="sb-overline">{listing.gender === "any" ? "Co-ed" : listing.gender === "men" ? "Men's" : listing.gender === "women" ? "Women's" : "Co-ed"} · {listing.city}</p>
+            <p className="sb-overline">{listing.region || (listing.gender === "any" ? "Co-ed" : listing.gender === "men" ? "Men's" : "Women's")} · {listing.city}{listing.state ? `, ${listing.state}` : ""}</p>
             <h1 className="mt-3 font-serif text-4xl lg:text-5xl text-[#2D3339] leading-tight">{listing.house_name}</h1>
-            <p className="mt-3 flex items-center gap-1.5 text-[#5C6670]"><MapPin size={16} strokeWidth={1.6}/> {listing.city}, CA · {listing.zip_code}<span className="ml-2 text-[#8A94A0] text-sm">(no address shown for resident safety)</span></p>
+            <p className="mt-3 flex items-center gap-1.5 text-[#5C6670]"><MapPin size={16} strokeWidth={1.6}/> {listing.city}{listing.state ? `, ${listing.state}` : ", CA"} · {listing.zip_code}<span className="ml-2 text-[#8A94A0] text-sm">(no address shown for resident safety)</span></p>
           </div>
 
           <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4">

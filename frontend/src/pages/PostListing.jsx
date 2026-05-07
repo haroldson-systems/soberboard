@@ -17,6 +17,8 @@ export default function PostListing() {
   const [form, setForm] = useState({
     house_name: "",
     city: "",
+    state: "CA",
+    region: "",
     zip_code: "",
     beds_open: 1,
     price_weekly: "",
@@ -72,8 +74,22 @@ export default function PostListing() {
           <input required className="sb-input" value={form.house_name} onChange={(e) => set("house_name", e.target.value)} data-testid="post-house-name"/>
         </Field>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <Field label="City"><input required className="sb-input" value={form.city} onChange={(e) => set("city", e.target.value)} data-testid="post-city"/></Field>
+          <Field label="State">
+            <select className="sb-input" value={form.state} onChange={(e) => set("state", e.target.value)} data-testid="post-state">
+              <option value="CA">California</option>
+              <option value="AZ">Arizona</option>
+              <option value="NV">Nevada</option>
+              <option value="OR">Oregon</option>
+              <option value="WA">Washington</option>
+              <option value="TX">Texas</option>
+              <option value="FL">Florida</option>
+              <option value="NY">New York</option>
+              <option value="CO">Colorado</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </Field>
           <Field label="Zip code"><input required maxLength={5} pattern="[0-9]{5}" className="sb-input" value={form.zip_code} onChange={(e) => set("zip_code", e.target.value)} data-testid="post-zip"/></Field>
         </div>
 

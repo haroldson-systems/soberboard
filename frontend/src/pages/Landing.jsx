@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, ArrowRight, Heart, Sun, Quote } from "lucide-react";
+import { Search, ArrowRight, Heart, Sun, Quote, MapPin } from "lucide-react";
 import api from "@/lib/api";
 import BedCard from "@/components/BedCard";
 import SponsoredAds from "@/components/SponsoredAds";
@@ -10,15 +10,17 @@ const REFLECTION_IMG = "https://images.unsplash.com/photo-1575835760958-07fb64d1
 
 export default function Landing() {
   const [q, setQ] = useState("");
-  const [stats, setStats] = useState({ active_listings: 0, total_open_beds: 0, cities_covered: 0 });
+  const [stats, setStats] = useState({ active_listings: 0, total_open_beds: 0, cities_covered: 0, regions_covered: 0, states_covered: 0 });
   const [featured, setFeatured] = useState([]);
   const [reflection, setReflection] = useState(null);
+  const [regions, setRegions] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
     api.get("/stats").then(r => setStats(r.data)).catch(() => {});
     api.get("/listings").then(r => setFeatured(r.data.slice(0, 6))).catch(() => {});
     api.get("/reflection/today").then(r => setReflection(r.data)).catch(() => {});
+    api.get("/regions").then(r => setRegions(r.data)).catch(() => {});
   }, []);
 
   const onSearch = (e) => {
@@ -35,13 +37,13 @@ export default function Landing() {
           <div className="absolute inset-0 bg-gradient-to-b from-[#FDFBF7]/30 via-[#2B4C5F]/40 to-[#2B4C5F]/85"/>
         </div>
         <div className="sb-grain relative z-10 max-w-7xl mx-auto px-5 md:px-8 lg:px-12 pt-24 pb-32 lg:pt-36 lg:pb-44">
-          <p className="sb-overline text-white/80" data-testid="hero-eyebrow">Free · Built for Recovery · Orange County</p>
+          <p className="sb-overline text-white/80" data-testid="hero-eyebrow">Free · Built for Recovery · California, expanding nationwide</p>
           <h1 className="mt-5 font-serif text-white text-4xl sm:text-5xl lg:text-[5.25rem] leading-[1.02] tracking-tight max-w-4xl">
             A free home for finding a <em className="text-[#F3EFE7]">home</em> in recovery.
           </h1>
           <p className="mt-6 text-white/85 text-lg max-w-2xl leading-relaxed">
             SoberBoard is the MLS for sober living. House managers post open beds — for free.
-            People in recovery search by city and zip — for free. Addresses stay private.
+            People in recovery search by city, zip, or region — for free. Addresses stay private.
           </p>
 
           <form onSubmit={onSearch} className="mt-10 max-w-2xl bg-white rounded-2xl p-2 flex items-center gap-2 shadow-lg shadow-black/20" data-testid="hero-search-form">
@@ -49,7 +51,7 @@ export default function Landing() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by city or zip — Garden Grove, 92840, Costa Mesa…"
+              placeholder="Search city, zip, or region — Long Beach, 92103, San Diego…"
               className="flex-1 outline-none px-1 py-2 text-[#2D3339] placeholder-[#8A94A0]"
               data-testid="hero-search-input"
             />
@@ -61,7 +63,8 @@ export default function Landing() {
           <div className="mt-12 flex flex-wrap gap-x-10 gap-y-4 text-white">
             <Stat label="open beds" value={stats.total_open_beds}/>
             <Stat label="active listings" value={stats.active_listings}/>
-            <Stat label="cities covered" value={stats.cities_covered}/>
+            <Stat label="regions" value={stats.regions_covered ?? stats.cities_covered}/>
+            <Stat label="states" value={stats.states_covered ?? 1}/>
             <Stat label="listing fees" value="$0"/>
           </div>
         </div>
@@ -103,7 +106,7 @@ export default function Landing() {
         <div className="flex items-end justify-between gap-6 mb-10">
           <div>
             <p className="sb-overline">Open right now</p>
-            <h2 className="mt-2 font-serif text-3xl lg:text-4xl text-[#2D3339]">Featured beds in Orange County</h2>
+            <h2 className="mt-2 font-serif text-3xl lg:text-4xl text-[#2D3339]">Open beds across California & beyond</h2>
           </div>
           <Link to="/beds" className="hidden sm:inline-flex items-center gap-2 text-[#C26D53] font-semibold hover:gap-3 transition-all" data-testid="featured-see-all">
             See all listings <ArrowRight size={16}/>
@@ -114,6 +117,36 @@ export default function Landing() {
         </div>
         <div className="mt-10 sm:hidden">
           <Link to="/beds" className="sb-btn-outline inline-flex items-center gap-2">See all listings <ArrowRight size={16}/></Link>
+        </div>
+      </section>
+
+      {/* WHERE WE ARE — region coverage */}
+      <section className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-10 lg:py-16">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-end mb-8">
+          <div className="md:col-span-7">
+            <p className="sb-overline">Where we are</p>
+            <h2 className="mt-2 font-serif text-3xl lg:text-4xl text-[#2D3339]">Starting in California — building everywhere next.</h2>
+          </div>
+          <p className="md:col-span-5 text-[#5C6670]">
+            We started in Orange County. We're already live across LA County, San Diego, the Inland Empire,
+            and beyond California. House manager somewhere we haven't covered? Post a bed — we'll go where you are.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4" data-testid="regions-grid">
+          {regions.slice(0, 10).map(r => (
+            <Link
+              key={`${r.state}-${r.region}`}
+              to={`/beds?state=${encodeURIComponent(r.state)}&region=${encodeURIComponent(r.region)}`}
+              className="sb-card p-5 group"
+              data-testid={`region-card-${r.region.replace(/\W+/g,'-')}`}
+            >
+              <div className="flex items-center gap-1.5 text-xs text-[#8A94A0] uppercase tracking-[0.2em]"><MapPin size={11}/>{r.state}</div>
+              <h3 className="mt-2 font-serif text-lg text-[#2D3339]">{r.region}</h3>
+              <p className="mt-2 text-sm text-[#5C6670]">
+                <span className="font-semibold text-[#C26D53]">{r.beds}</span> beds · {r.listings} {r.listings === 1 ? "house" : "houses"}
+              </p>
+            </Link>
+          ))}
         </div>
       </section>
 
@@ -140,7 +173,7 @@ export default function Landing() {
         </div>
 
         <div className="lg:col-span-5 grid grid-cols-1 gap-5">
-          <EcoCard to="/jobs" title="Jobs board" desc="Recovery-friendly employers across OC. Background-aware, second-chance hiring." kicker="Hiring now"/>
+          <EcoCard to="/jobs" title="Jobs board" desc="Recovery-friendly employers across California (and growing). Background-aware, second-chance hiring." kicker="Hiring now"/>
           <EcoCard to="/services" title="Services & legal help" desc="DUI attorneys, expungement, insurance navigators, food assistance, mental health." kicker="Free & low-cost"/>
           <EcoCard to="/about" title="Why SoberBoard is free" desc="Local businesses fund the board. We never charge operators or residents. Ever." kicker="Our promise" icon={<Heart size={18} strokeWidth={1.6}/>}/>
         </div>

@@ -38,8 +38,9 @@ export default function BedCard({ listing, index = 0 }) {
           <h3 className="font-serif text-xl leading-tight text-[#2D3339]">{listing.house_name}</h3>
         </div>
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-[#5C6670]">
-          <MapPin size={14} strokeWidth={1.6}/> {listing.city} · {listing.zip_code}
+          <MapPin size={14} strokeWidth={1.6}/> {listing.city}{listing.state ? `, ${listing.state}` : ""} · {listing.zip_code}
         </p>
+        {listing.region && <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[#8A94A0]">{listing.region}</p>}
         <div className="mt-4 flex flex-wrap gap-1.5">
           <span className="sb-chip"><Users size={12} strokeWidth={1.6}/> {listing.people_per_room} per room</span>
           <span className="sb-chip"><Bed size={12} strokeWidth={1.6}/> {listing.gender}</span>

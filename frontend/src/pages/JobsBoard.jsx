@@ -23,7 +23,7 @@ export default function JobsBoard() {
             Jobs that don't fire you for relapsing.
           </h1>
           <p className="mt-4 text-[#5C6670] text-lg max-w-xl">
-            Recovery-friendly employers across Orange County. Background-aware, second-chance hiring,
+            Recovery-friendly employers across California (and growing). Background-aware, second-chance hiring,
             flexible with treatment schedules.
           </p>
         </div>
