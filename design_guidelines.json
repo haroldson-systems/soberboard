@@ -1,0 +1,113 @@
+{
+  "theme": "light",
+  "archetype": "1 (Organic & Earthy)",
+  "emotional_tone": "Authentic, hopeful, human, trustworthy, warm, sun-drenched SoCal.",
+  "colors": {
+    "background": {
+      "base": "#FDFBF7",
+      "surface": "#FFFFFF",
+      "alt": "#F3EFE7"
+    },
+    "text": {
+      "primary": "#2D3339",
+      "secondary": "#5C6670",
+      "accent": "#C26D53",
+      "muted": "#8A94A0"
+    },
+    "brand": {
+      "primary": "#C26D53",
+      "primary_hover": "#A85B44",
+      "secondary": "#2B4C5F",
+      "success": "#5E7B62",
+      "warning": "#D4A373",
+      "border": "#EAE5D9"
+    }
+  },
+  "typography": {
+    "font_families": {
+      "heading": "Fraunces, serif",
+      "body": "Manrope, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl font-serif tracking-tight leading-tight",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl font-serif tracking-tight leading-snug",
+      "h3": "text-xl sm:text-2xl font-serif tracking-tight",
+      "h4": "text-lg sm:text-xl font-serif",
+      "body": "text-base font-sans leading-relaxed text-[#5C6670]",
+      "small": "text-sm font-sans tracking-wide",
+      "overline": "text-xs font-sans uppercase tracking-[0.2em] font-semibold text-[#8A94A0]"
+    }
+  },
+  "spacing_and_layout": {
+    "container_padding": "p-6 md:p-12 lg:p-16",
+    "section_gap": "gap-16 lg:gap-32",
+    "grid_modes": {
+      "hero_bento": "grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8",
+      "cards": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+    },
+    "border_radius": {
+      "cards": "rounded-2xl",
+      "buttons": "rounded-full",
+      "inputs": "rounded-xl",
+      "images": "rounded-3xl"
+    }
+  },
+  "surfaces_and_textures": {
+    "cards": "bg-white border border-[#EAE5D9] shadow-sm hover:shadow-md transition-all duration-300",
+    "glass_header": "bg-[#FDFBF7]/80 backdrop-blur-xl border-b border-[#EAE5D9]/50",
+    "hero_overlay": "bg-gradient-to-t from-black/60 via-black/20 to-transparent",
+    "textures": "Add subtle SVG noise/grain overlay globally or on hero images to prevent 'flat digital' look."
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#C26D53] text-white hover:bg-[#A85B44] rounded-full px-6 py-3 font-medium transition-colors",
+      "secondary": "bg-[#F3EFE7] text-[#2D3339] hover:bg-[#EAE5D9] rounded-full px-6 py-3 font-medium transition-colors",
+      "outline": "border-2 border-[#EAE5D9] text-[#2D3339] hover:border-[#C26D53] rounded-full px-6 py-3 font-medium transition-colors"
+    },
+    "inputs": "bg-white border border-[#EAE5D9] rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#C26D53]/20 focus:border-[#C26D53] text-[#2D3339] placeholder-[#8A94A0]",
+    "amenity_chips": "bg-[#F3EFE7] text-[#5C6670] text-sm px-3 py-1 rounded-full flex items-center gap-1.5"
+  },
+  "motion_and_interaction": {
+    "hover": "Subtle -translate-y-1 on cards, text color darkening, shadow depth increase.",
+    "transitions": "transition-all duration-300 ease-out",
+    "entrance": "Staggered fade-up for directory grid items."
+  },
+  "media": {
+    "image_urls": {
+      "hero_background": {
+        "url": "https://images.unsplash.com/photo-1737224695288-0f2b8d030d33?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwyfHxzb3V0aGVybiUyMGNhbGlmb3JuaWElMjBiZWFjaCUyMHN1bnJpc2V8ZW58MHx8fHwxNzc4MTM0MTI5fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Warm, sun-drenched Southern California beach sunrise. Use as hero background with gradient overlay."
+      },
+      "featured_bed_1": {
+        "url": "https://images.unsplash.com/photo-1759355787121-eaef014a501d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBjYWxpZm9ybmlhJTIwaG9tZSUyMGV4dGVyaW9yJTIwd2FybXxlbnwwfHx8fDE3NzgxMzQxMjl8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Modern California home exterior, warm lighting, trustworthy."
+      },
+      "featured_bed_2": {
+        "url": "https://images.unsplash.com/photo-1629682160476-160736c74738?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBjYWxpZm9ybmlhJTIwaG9tZSUyMGV4dGVyaW9yJTIwd2FybXxlbnwwfHx8fDE3NzgxMzQxMjl8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Warm concrete house near trees."
+      },
+      "daily_reflection_bg": {
+        "url": "https://images.unsplash.com/photo-1575835760958-07fb64d1f659?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHw0fHxzb3V0aGVybiUyMGNhbGlmb3JuaWElMjBiZWFjaCUyMHN1bnJpc2V8ZW58MHx8fHwxNzc4MTM0MTI5fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Blue ocean, peaceful waves, use as background for reflection cards."
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "Use lucide-react with strokeWidth={1.5} for an elegant, non-clinical feel. Use them for amenities (pool, parking, pets), contact, and navigation."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Install 'lucide-react' if not already present.",
+    "Use 'Fraunces' for all headings and 'Manrope' for body text. Load them via Google Fonts in index.html.",
+    "Ensure 'data-testid' attributes are added to all interactive elements.",
+    "Apply 'bg-[#FDFBF7]' globally for the body. Do not use generic white background everywhere.",
+    "Design the landing page with a hero section overlaying the 'hero_background' image, heavily utilizing the 'hero_overlay' gradient so text is readable.",
+    "Implement the 'Beds Directory' grid using the 'cards' layout and 'surfaces_and_textures.cards'.",
+    "Avoid AI-slop: NEVER use purple/violet gradients, Inter, Roboto, or generic shadow styles.",
+    "Do not use Shadcn card for the actual bed listings if it limits layout. Use raw HTML/Tailwind for editorial bento grids and asymmetric designs.",
+    "Ensure the header navigation is sticky and uses 'glass_header' design.",
+    "Keep forms (Post Listing) clean, leveraging standard inputs but stylized with rounded-xl borders.",
+    "For sponsorships (Lawyers, Dealerships), use Lucide icons with solid backgrounds if brand logos aren't provided."
+  ]
+}
