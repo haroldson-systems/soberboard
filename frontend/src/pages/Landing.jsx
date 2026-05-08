@@ -37,9 +37,9 @@ export default function Landing() {
           <div className="absolute inset-0 bg-gradient-to-b from-[#FDFBF7]/30 via-[#2B4C5F]/40 to-[#2B4C5F]/85"/>
         </div>
         <div className="sb-grain relative z-10 max-w-7xl mx-auto px-5 md:px-8 lg:px-12 pt-24 pb-32 lg:pt-36 lg:pb-44">
-          <p className="sb-overline text-white/80" data-testid="hero-eyebrow">Free · Built for Recovery · California, expanding nationwide</p>
+          <p className="sb-overline text-white/80" data-testid="hero-eyebrow">Built for Recovery · California, expanding nationwide</p>
           <h1 className="mt-5 font-serif text-white text-4xl sm:text-5xl lg:text-[5.25rem] leading-[1.02] tracking-tight max-w-4xl">
-            A free home for finding a <em className="text-[#F3EFE7]">home</em> in recovery.
+            A Bed. A Call. <em className="text-[#F3EFE7]">A Fresh Start.</em>
           </h1>
           <p className="mt-6 text-white/85 text-lg max-w-2xl leading-relaxed">
             SoberBoard is the MLS for sober living. House managers post open beds — for free.
