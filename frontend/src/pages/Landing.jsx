@@ -42,8 +42,8 @@ export default function Landing() {
             A Bed. A Call. <em className="text-[#F3EFE7]">A Fresh Start.</em>
           </h1>
           <p className="mt-6 text-white/85 text-lg max-w-2xl leading-relaxed">
-            SoberBoard is the MLS for sober living. House managers post open beds — for free.
-            People in recovery search by city, zip, or region — for free. Addresses stay private.
+            SoberBoard is the MLS for sober living. House managers post open beds. People in recovery
+            search by city, zip, or region. No fees. No addresses. Just direct connection.
           </p>
 
           <form onSubmit={onSearch} className="mt-10 max-w-2xl bg-white rounded-2xl p-2 flex items-center gap-2 shadow-lg shadow-black/20" data-testid="hero-search-form">
