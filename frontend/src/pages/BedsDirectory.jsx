@@ -120,9 +120,10 @@ export default function BedsDirectory() {
           {cities.map(c => <option key={c} value={c === "All cities" ? "" : c}>{c}</option>)}
         </select>
         <select className="sb-input md:col-span-2" value={gender || "any"} onChange={(e) => setParam("gender", e.target.value)} data-testid="beds-gender-filter">
-          <option value="any">Any gender</option>
+          <option value="any">Any housing</option>
           <option value="men">Men's</option>
           <option value="women">Women's</option>
+          <option value="couples">Couples</option>
           <option value="coed">Co-ed</option>
         </select>
         <select className="sb-input md:col-span-2" value={maxPrice} onChange={(e) => setParam("max_price", e.target.value)} data-testid="beds-price-filter">

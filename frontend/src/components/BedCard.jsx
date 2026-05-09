@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Bed, Users, PawPrint, Waves, Car } from "lucide-react";
+import { publicUrl } from "@/components/ImageUploader";
 
 export default function BedCard({ listing, index = 0 }) {
   const price = listing.price_weekly
@@ -10,6 +11,9 @@ export default function BedCard({ listing, index = 0 }) {
     : "Inquire";
 
   const fallback = `https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900`;
+  const cover = (listing.image_urls && listing.image_urls.length > 0)
+    ? publicUrl(listing.image_urls[0])
+    : (listing.image_url || fallback);
 
   return (
     <Link
@@ -20,7 +24,7 @@ export default function BedCard({ listing, index = 0 }) {
     >
       <div className="aspect-[5/4] overflow-hidden relative bg-[#F3EFE7]">
         <img
-          src={listing.image_url || fallback}
+          src={cover}
           onError={(e) => { e.currentTarget.src = fallback; }}
           alt={listing.house_name}
           loading="lazy"

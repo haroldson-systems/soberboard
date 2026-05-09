@@ -11,10 +11,11 @@ import secrets
 import bcrypt
 import jwt
 import httpx
+import requests
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, status, UploadFile, File
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
@@ -159,7 +160,7 @@ class ListingIn(BaseModel):
     price_weekly: Optional[float] = None
     price_monthly: Optional[float] = None
     people_per_room: int = Field(ge=1, le=8, default=2)
-    gender: str = "any"  # men, women, any, coed
+    gender: str = "any"  # men, women, couples, any, coed
     pets_allowed: bool = False
     pool: bool = False
     parking: str = "street"  # street, driveway, garage, none
@@ -167,6 +168,7 @@ class ListingIn(BaseModel):
     description: str = ""
     manager_name: str
     manager_phone: str
+    image_urls: List[str] = []
 
 
 class ListingOut(ListingIn):
@@ -177,6 +179,72 @@ class ListingOut(ListingIn):
     updated_at: str
     expires_at: str
     image_url: Optional[str] = None
+
+
+# ============== OBJECT STORAGE ==============
+STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+APP_NAME = "soberboard"
+_storage_key: Optional[str] = None
+MIME_TYPES = {
+    "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "gif": "image/gif", "webp": "image/webp", "heic": "image/heic",
+}
+MAX_IMAGES_PER_LISTING = 6
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
+
+
+def init_storage() -> Optional[str]:
+    global _storage_key
+    if _storage_key:
+        return _storage_key
+    emergent_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not emergent_key:
+        return None
+    try:
+        r = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": emergent_key}, timeout=15)
+        r.raise_for_status()
+        _storage_key = r.json().get("storage_key")
+        return _storage_key
+    except Exception as e:
+        logging.getLogger("soberboard").warning(f"Storage init failed: {e}")
+        return None
+
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    if not key:
+        raise HTTPException(status_code=503, detail="Storage unavailable")
+    r = requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data, timeout=60,
+    )
+    if r.status_code == 403:
+        # Refresh key and retry once
+        global _storage_key
+        _storage_key = None
+        key = init_storage()
+        r = requests.put(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key, "Content-Type": content_type},
+            data=data, timeout=60,
+        )
+    r.raise_for_status()
+    return r.json()
+
+
+def get_object(path: str) -> tuple:
+    key = init_storage()
+    if not key:
+        raise HTTPException(status_code=503, detail="Storage unavailable")
+    r = requests.get(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key}, timeout=60,
+    )
+    if r.status_code == 404:
+        raise HTTPException(status_code=404, detail="File not found")
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "application/octet-stream")
 
 
 # ============== AUTH ENDPOINTS ==============
@@ -531,6 +599,47 @@ async def root():
     return {"app": "SoberBoard", "ok": True}
 
 
+# ============== UPLOADS ==============
+@api_router.post("/uploads/image")
+async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Operator-uploaded listing photos. Returns the storage path; frontend stores
+    that on the listing's image_urls array and renders via /api/files/{path}."""
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    if ext not in MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, GIF, WEBP, or HEIC images are supported")
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large (max 8 MB)")
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+    content_type = file.content_type or MIME_TYPES.get(ext, "application/octet-stream")
+    path = f"{APP_NAME}/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+    result = put_object(path, data, content_type)
+    stored_path = result.get("path", path)
+    await db.uploaded_files.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user["user_id"],
+        "storage_path": stored_path,
+        "original_filename": file.filename,
+        "content_type": content_type,
+        "size": result.get("size", len(data)),
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"path": stored_path, "url": f"/api/files/{stored_path}"}
+
+
+@api_router.get("/files/{path:path}")
+async def serve_file(path: str):
+    """Public file proxy. Listings are public so listing photos are public too;
+    paths are UUID-based and unguessable."""
+    record = await db.uploaded_files.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="File not found")
+    data, content_type = get_object(path)
+    return Response(content=data, media_type=record.get("content_type") or content_type, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
 # ============== STARTUP / SEED ==============
 # Region inference for backfill — keeps existing OC seed data intact while
 # letting us expand to LA, San Diego, Inland Empire, and other states.
@@ -658,6 +767,15 @@ SEED_ADS = [
 
 @app.on_event("startup")
 async def on_startup():
+    # Storage init (best-effort — auth still works without storage)
+    try:
+        if init_storage():
+            logging.getLogger("soberboard").info("Object storage initialized")
+        else:
+            logging.getLogger("soberboard").warning("Object storage not available — image uploads disabled")
+    except Exception as e:
+        logging.getLogger("soberboard").warning(f"Storage init failed at startup: {e}")
+
     # Indexes
     await db.users.create_index("email", unique=True)
     await db.users.create_index("user_id", unique=True)

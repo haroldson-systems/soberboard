@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Phone, MapPin, Users, Bed, PawPrint, Waves, Car, CheckCircle2, Calendar } from "lucide-react";
 import api from "@/lib/api";
 import SponsoredAds from "@/components/SponsoredAds";
+import { publicUrl } from "@/components/ImageUploader";
 
 export default function ListingDetail() {
   const { id } = useParams();
@@ -17,6 +18,10 @@ export default function ListingDetail() {
   if (!listing) return <div className="max-w-3xl mx-auto px-5 py-20 text-[#8A94A0]">Loading…</div>;
 
   const fallback = "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1400";
+  const uploaded = (listing.image_urls || []).map(publicUrl);
+  const photos = uploaded.length > 0 ? uploaded : [listing.image_url || fallback];
+  const cover = photos[0];
+  const rest = photos.slice(1, 5);
   const price = listing.price_weekly ? `$${listing.price_weekly}/week` : listing.price_monthly ? `$${listing.price_monthly}/month` : "Inquire";
   const monthly = listing.price_monthly ? ` · $${listing.price_monthly}/mo` : "";
 
@@ -28,13 +33,25 @@ export default function ListingDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-8">
-          <div className="rounded-3xl overflow-hidden border border-[#EAE5D9] bg-[#F3EFE7]">
-            <img
-              src={listing.image_url || fallback}
-              onError={(e) => { e.currentTarget.src = fallback; }}
-              alt={listing.house_name}
-              className="w-full aspect-[16/10] object-cover"
-            />
+          <div className={`grid gap-3 ${rest.length > 0 ? "grid-cols-1 md:grid-cols-12" : "grid-cols-1"}`}>
+            <div className={`rounded-3xl overflow-hidden border border-[#EAE5D9] bg-[#F3EFE7] ${rest.length > 0 ? "md:col-span-8" : ""}`}>
+              <img
+                src={cover}
+                onError={(e) => { e.currentTarget.src = fallback; }}
+                alt={listing.house_name}
+                className="w-full aspect-[16/10] object-cover"
+                data-testid="listing-cover-image"
+              />
+            </div>
+            {rest.length > 0 && (
+              <div className="md:col-span-4 grid grid-cols-2 md:grid-cols-1 gap-3">
+                {rest.map((src, i) => (
+                  <div key={src + i} className="rounded-2xl overflow-hidden border border-[#EAE5D9] bg-[#F3EFE7]" data-testid={`listing-photo-${i + 1}`}>
+                    <img src={src} onError={(e) => { e.currentTarget.src = fallback; }} alt={`${listing.house_name} ${i + 2}`} className="w-full h-full aspect-[4/3] object-cover"/>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="mt-8">

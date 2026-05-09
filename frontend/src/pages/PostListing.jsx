@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { CheckCircle2, Lock, Sparkles, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import api, { formatApiError } from "@/lib/api";
+import ImageUploader from "@/components/ImageUploader";
 
 const AMENITY_OPTIONS = [
   "Pool in backyard", "Plenty of parking", "Cable & WiFi", "Furnished",
@@ -116,6 +117,10 @@ export default function PostListing() {
           <input required className="sb-input" value={form.house_name} onChange={(e) => set("house_name", e.target.value)} data-testid="post-house-name"/>
         </Field>
 
+        <Field label="House photos" hint="Up to 6 photos — exterior, common areas, rooms. Optional but listings with photos get many more inquiries.">
+          <ImageUploader value={form.image_urls} onChange={(urls) => set("image_urls", urls)} />
+        </Field>
+
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="sb-overline">Where the house is</span>
@@ -151,10 +156,11 @@ export default function PostListing() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Field label="Gender">
+          <Field label="Gender / housing">
             <select className="sb-input" value={form.gender} onChange={(e) => set("gender", e.target.value)} data-testid="post-gender">
               <option value="men">Men's</option>
               <option value="women">Women's</option>
+              <option value="couples">Couples</option>
               <option value="any">Any</option>
               <option value="coed">Co-ed (separate floors)</option>
             </select>
