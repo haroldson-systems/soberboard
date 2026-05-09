@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
-import { CheckCircle2 } from "lucide-react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { CheckCircle2, Lock, Sparkles, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import api, { formatApiError } from "@/lib/api";
 
@@ -37,7 +37,26 @@ export default function PostListing() {
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) return <div className="p-20 text-center text-[#8A94A0]">Loading…</div>;
-  if (!user) return <Navigate to="/login" replace/>;
+  if (!user) {
+    return (
+      <div className="max-w-2xl mx-auto px-5 md:px-8 py-16" data-testid="post-listing-gate">
+        <p className="sb-overline">Operator onboarding</p>
+        <h1 className="mt-3 font-serif text-4xl text-[#2D3339] leading-tight">Post a bed in 90 seconds.</h1>
+
+        <div className="mt-8 space-y-4">
+          <Bullet icon={<Sparkles size={18} strokeWidth={1.6}/>} title="Free forever">No listing fees, no commission, no premium tiers.</Bullet>
+          <Bullet icon={<ShieldCheck size={18} strokeWidth={1.6}/>} title="No address is ever published">We show city, zip, and region only — never the street.</Bullet>
+          <Bullet icon={<Lock size={18} strokeWidth={1.6}/>} title="Auto-expires after 7 days">So your board never goes stale. Reactivate in one click.</Bullet>
+        </div>
+
+        <p className="mt-8 text-[#5C6670]">Sign in or create a free operator account to post your first bed.</p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link to="/register" className="sb-btn-primary" data-testid="gate-register-btn">Create a free account</Link>
+          <Link to="/login" className="sb-btn-outline" data-testid="gate-login-btn">I already have one</Link>
+        </div>
+      </div>
+    );
+  }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleAmenity = (a) => set("amenities", form.amenities.includes(a) ? form.amenities.filter(x => x !== a) : [...form.amenities, a]);
@@ -65,32 +84,63 @@ export default function PostListing() {
 
   return (
     <div className="max-w-3xl mx-auto px-5 md:px-8 py-12" data-testid="post-listing-page">
-      <p className="sb-overline">Free · auto-expires in 7 days · reactivate anytime</p>
+      {/* FREE banner — prominent */}
+      <div className="rounded-2xl bg-[#2B4C5F] text-white p-5 md:p-6 flex flex-col sm:flex-row sm:items-center gap-4 mb-8 sb-grain relative overflow-hidden" data-testid="free-banner">
+        <div className="relative z-10 h-11 w-11 rounded-xl bg-[#C26D53] grid place-items-center shrink-0">
+          <Sparkles size={20} strokeWidth={1.6}/>
+        </div>
+        <div className="relative z-10">
+          <p className="font-serif text-xl leading-tight" data-testid="free-banner-headline">Free to post. Forever. No credit card.</p>
+          <p className="text-white/80 text-sm mt-1">Listings auto-expire after 7 days so the board stays current — reactivate yours in one click anytime.</p>
+        </div>
+      </div>
+
+      <p className="sb-overline">Operator onboarding · Step 1 of 1</p>
       <h1 className="mt-3 font-serif text-4xl text-[#2D3339]">Post a bed</h1>
-      <p className="mt-3 text-[#5C6670]">No address is ever published. Only the city and zip are shown to residents.</p>
+      <p className="mt-3 text-[#5C6670]">Takes about 90 seconds. Real residents will see your listing the moment you submit.</p>
+
+      {/* Privacy callout */}
+      <div className="mt-6 rounded-2xl border border-[#EAE5D9] bg-[#F3EFE7] p-5 flex gap-4" data-testid="privacy-callout">
+        <ShieldCheck size={22} strokeWidth={1.6} className="text-[#5E7B62] shrink-0 mt-0.5"/>
+        <div>
+          <p className="font-serif text-lg text-[#2D3339] leading-snug">We never publish your exact address.</p>
+          <p className="text-sm text-[#5C6670] mt-1 leading-relaxed">
+            Residents only see the <strong>city, zip code, and region</strong> — never the street or unit.
+            They reach out by phone first, so you decide who comes to the door.
+          </p>
+        </div>
+      </div>
 
       <form onSubmit={submit} className="mt-10 space-y-7">
         <Field label="House name" hint="The friendly name residents will see — e.g. 'Garden Grove Sober House'.">
           <input required className="sb-input" value={form.house_name} onChange={(e) => set("house_name", e.target.value)} data-testid="post-house-name"/>
         </Field>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          <Field label="City"><input required className="sb-input" value={form.city} onChange={(e) => set("city", e.target.value)} data-testid="post-city"/></Field>
-          <Field label="State">
-            <select className="sb-input" value={form.state} onChange={(e) => set("state", e.target.value)} data-testid="post-state">
-              <option value="CA">California</option>
-              <option value="AZ">Arizona</option>
-              <option value="NV">Nevada</option>
-              <option value="OR">Oregon</option>
-              <option value="WA">Washington</option>
-              <option value="TX">Texas</option>
-              <option value="FL">Florida</option>
-              <option value="NY">New York</option>
-              <option value="CO">Colorado</option>
-              <option value="OTHER">Other</option>
-            </select>
-          </Field>
-          <Field label="Zip code"><input required maxLength={5} pattern="[0-9]{5}" className="sb-input" value={form.zip_code} onChange={(e) => set("zip_code", e.target.value)} data-testid="post-zip"/></Field>
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="sb-overline">Where the house is</span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-[#5E7B62]" data-testid="no-address-hint">
+              <Lock size={11} strokeWidth={2}/> City + zip only — never street
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <Field label="City"><input required className="sb-input" value={form.city} onChange={(e) => set("city", e.target.value)} data-testid="post-city"/></Field>
+            <Field label="State">
+              <select className="sb-input" value={form.state} onChange={(e) => set("state", e.target.value)} data-testid="post-state">
+                <option value="CA">California</option>
+                <option value="AZ">Arizona</option>
+                <option value="NV">Nevada</option>
+                <option value="OR">Oregon</option>
+                <option value="WA">Washington</option>
+                <option value="TX">Texas</option>
+                <option value="FL">Florida</option>
+                <option value="NY">New York</option>
+                <option value="CO">Colorado</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </Field>
+            <Field label="Zip code"><input required maxLength={5} pattern="[0-9]{5}" className="sb-input" value={form.zip_code} onChange={(e) => set("zip_code", e.target.value)} data-testid="post-zip"/></Field>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
@@ -168,5 +218,17 @@ function Field({ label, hint, children }) {
       {children}
       {hint && <span className="block text-xs text-[#8A94A0] mt-1.5">{hint}</span>}
     </label>
+  );
+}
+
+function Bullet({ icon, title, children }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="h-9 w-9 rounded-xl bg-[#F3EFE7] text-[#C26D53] grid place-items-center shrink-0">{icon}</div>
+      <div>
+        <p className="font-serif text-lg text-[#2D3339] leading-tight">{title}</p>
+        <p className="text-sm text-[#5C6670] mt-0.5">{children}</p>
+      </div>
+    </div>
   );
 }
