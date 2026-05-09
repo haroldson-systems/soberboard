@@ -80,9 +80,9 @@ export default function Landing() {
             </h2>
           </div>
           <p className="md:col-span-7 md:col-start-7 text-[#5C6670] text-lg leading-relaxed">
-            We're not a treatment center. We're not a placement service. We're the free, simple
-            board where the recovery community finds beds, jobs, and the help most directories
-            charge for. Forever free for residents and operators.
+            We're not a treatment center. We're not a placement service. We're a simple board where the
+            recovery community finds beds, jobs, and support. Most directories charge for this — we don't.
+            Forever free for residents and operators.
           </p>
         </div>
 
