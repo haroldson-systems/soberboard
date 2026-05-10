@@ -294,21 +294,21 @@ export default function Landing() {
 
             <div className="px-8 md:px-10 py-10 flex-1 flex flex-col justify-between">
               <div>
-                <p className="sb-overline">Orange County · Est. before most of us</p>
+                <p className="sb-overline">Fountain Valley · Orange County</p>
                 <h3 className="mt-3 font-serif text-3xl md:text-[2.5rem] leading-[1.05] tracking-tight text-[#2D3339]">
-                  Fountain Valley.
+                  The Fountain Valley Alano Club.
                 </h3>
                 <div className="mt-6 pl-5 border-l-2" style={{ borderColor: "#D4A373" }}>
                   <p className="font-serif text-lg md:text-xl leading-snug text-[#2D3339]">
-                    Home to the <em style={{ color: "#A8754A" }}>longest-running Cocaine Anonymous</em> meeting
-                    in Orange County.
+                    Proud home of the <em style={{ color: "#A8754A" }}>longest-running Cocaine Anonymous (CA)</em>
+                    {" "}meeting in Orange County.
                   </p>
                 </div>
               </div>
 
               <div className="mt-10 flex items-end justify-between gap-6">
                 <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A0]">
-                  CA · OC's quiet backbone
+                  An iconic OC clubhouse
                 </p>
                 <Link
                   to="/beds?city=Fountain%20Valley"
