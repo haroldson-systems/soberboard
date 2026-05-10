@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, ArrowRight, Heart, Sun, Quote, MapPin } from "lucide-react";
+import { Search, ArrowRight, Heart, Sun, Quote, MapPin, Award, Landmark } from "lucide-react";
 import api from "@/lib/api";
 import BedCard from "@/components/BedCard";
 import SponsoredAds from "@/components/SponsoredAds";
@@ -147,6 +147,128 @@ export default function Landing() {
               </p>
             </Link>
           ))}
+        </div>
+      </section>
+
+      {/* COMMUNITY PILLARS — premium, distinct treatment */}
+      <section className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-16 lg:py-24" data-testid="community-pillars">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-end mb-10">
+          <div className="md:col-span-7">
+            <p className="sb-overline" style={{ color: "#D4A373" }}>The Community Pillars</p>
+            <h2 className="mt-3 font-serif text-3xl lg:text-5xl text-[#2D3339] leading-[1.05]">
+              The houses, places, and people who built recovery in this community.
+            </h2>
+          </div>
+          <p className="md:col-span-5 text-[#5C6670] leading-relaxed">
+            SoberBoard is new. The fellowship behind it is not. These pillars were here long before us — and
+            we're honored to give them a permanent home on the board.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+          {/* Founding Partner — Charlie Street */}
+          <article
+            className="lg:col-span-7 relative overflow-hidden rounded-3xl sb-grain"
+            style={{ background: "linear-gradient(135deg, #1F3A4A 0%, #2B4C5F 55%, #3A6377 100%)" }}
+            data-testid="pillar-charlie-street"
+          >
+            <div
+              className="absolute -top-10 -right-10 h-64 w-64 rounded-full opacity-20"
+              style={{ background: "radial-gradient(circle, #D4A373 0%, transparent 70%)" }}
+            />
+            <div className="relative z-10 p-8 md:p-12 text-white">
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-11 w-11 rounded-xl grid place-items-center"
+                  style={{ background: "rgba(212, 163, 115, 0.18)", border: "1px solid rgba(212, 163, 115, 0.45)" }}
+                >
+                  <Award size={20} strokeWidth={1.6} style={{ color: "#E8C39A" }} />
+                </div>
+                <span
+                  className="text-[10px] uppercase font-bold tracking-[0.32em]"
+                  style={{ color: "#E8C39A" }}
+                >
+                  Founding Partner · Permanent
+                </span>
+              </div>
+
+              <p className="mt-10 sb-overline text-white/55">House № 001</p>
+              <h3 className="mt-3 font-serif text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.04] tracking-tight" style={{ fontStyle: "italic", color: "#F3EFE7" }}>
+                Charlie Street
+              </h3>
+              <p
+                className="mt-4 font-serif text-xl md:text-2xl leading-snug"
+                style={{ color: "#E8C39A" }}
+              >
+                A Foundation of Recovery.
+              </p>
+              <p className="mt-5 text-white/85 text-base md:text-lg leading-relaxed max-w-xl">
+                One of Orange County's most iconic houses, Charlie Street has been a cornerstone for the
+                community since the beginning. We are honored to have them as a permanent, free Founding Partner.
+              </p>
+
+              <div className="mt-10 flex items-center gap-3">
+                <div className="h-px w-10" style={{ background: "#D4A373" }} />
+                <span className="text-xs uppercase tracking-[0.28em]" style={{ color: "#D4A373" }}>
+                  Forever on the board · No fee, ever
+                </span>
+              </div>
+            </div>
+          </article>
+
+          {/* Historical highlight — Fountain Valley */}
+          <article
+            className="lg:col-span-5 relative overflow-hidden rounded-3xl bg-[#FDFBF7] border border-[#EAE5D9] flex flex-col"
+            data-testid="pillar-fountain-valley"
+          >
+            <div
+              className="px-8 md:px-10 pt-10 pb-2 border-b"
+              style={{ borderColor: "rgba(212, 163, 115, 0.35)" }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-11 w-11 rounded-xl grid place-items-center"
+                  style={{ background: "rgba(212, 163, 115, 0.18)", border: "1px solid rgba(212, 163, 115, 0.45)" }}
+                >
+                  <Landmark size={20} strokeWidth={1.6} style={{ color: "#A8754A" }} />
+                </div>
+                <span
+                  className="text-[10px] uppercase font-bold tracking-[0.32em]"
+                  style={{ color: "#A8754A" }}
+                >
+                  Historical Highlight
+                </span>
+              </div>
+            </div>
+
+            <div className="px-8 md:px-10 py-10 flex-1 flex flex-col justify-between">
+              <div>
+                <p className="sb-overline">Orange County · Est. before most of us</p>
+                <h3 className="mt-3 font-serif text-3xl md:text-[2.5rem] leading-[1.05] tracking-tight text-[#2D3339]">
+                  Fountain Valley.
+                </h3>
+                <div className="mt-6 pl-5 border-l-2" style={{ borderColor: "#D4A373" }}>
+                  <p className="font-serif text-lg md:text-xl leading-snug text-[#2D3339]">
+                    Home to the <em style={{ color: "#A8754A" }}>longest-running Cocaine Anonymous</em> meeting
+                    in Orange County.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-10 flex items-end justify-between gap-6">
+                <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A0]">
+                  CA · OC's quiet backbone
+                </p>
+                <Link
+                  to="/beds?city=Fountain%20Valley"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#A8754A] hover:gap-2.5 transition-all"
+                  data-testid="pillar-fv-link"
+                >
+                  Beds in Fountain Valley <ArrowRight size={14} />
+                </Link>
+              </div>
+            </div>
+          </article>
         </div>
       </section>
 
