@@ -192,7 +192,7 @@ export default function Landing() {
                 </span>
               </div>
 
-              <p className="mt-10 sb-overline text-white/55">House № 001</p>
+              <p className="mt-10 sb-overline text-white/55">House № 001 · Est. 1952</p>
               <h3 className="mt-3 font-serif text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.04] tracking-tight" style={{ fontStyle: "italic", color: "#F3EFE7" }}>
                 Charlie Street
               </h3>
@@ -206,6 +206,57 @@ export default function Landing() {
                 One of Orange County's most iconic houses, Charlie Street has been a cornerstone for the
                 community since the beginning. We are honored to have them as a permanent, free Founding Partner.
               </p>
+
+              {/* Historical chronology */}
+              <div className="mt-10 pt-8" style={{ borderTop: "1px solid rgba(212, 163, 115, 0.25)" }}>
+                <div className="flex items-center gap-3 mb-7">
+                  <span
+                    className="text-[10px] uppercase font-bold tracking-[0.32em]"
+                    style={{ color: "#D4A373" }}
+                  >
+                    A history worth keeping
+                  </span>
+                  <div className="flex-1 h-px" style={{ background: "rgba(212, 163, 115, 0.35)" }} />
+                </div>
+
+                <ol className="space-y-6">
+                  <li className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1" data-testid="ch-history-1952">
+                    <div className="font-serif text-2xl md:text-3xl leading-none pt-0.5" style={{ color: "#E8C39A", fontStyle: "italic" }}>1952</div>
+                    <div>
+                      <p className="font-serif text-lg md:text-xl text-white leading-snug">
+                        An old house at Harbor &amp; 19th — rented for <em style={{ color: "#E8C39A" }}>$50 a month</em>.
+                      </p>
+                      <p className="text-white/70 text-sm mt-1.5 leading-relaxed">
+                        The first beds. The first calls. Before there was an industry, there was this house.
+                      </p>
+                    </div>
+                  </li>
+
+                  <li className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1" data-testid="ch-history-firststep">
+                    <div className="font-serif text-2xl md:text-3xl leading-none pt-0.5" style={{ color: "#E8C39A", fontStyle: "italic" }}>Then</div>
+                    <div>
+                      <p className="font-serif text-lg md:text-xl text-white leading-snug">
+                        That first house grew into the <em style={{ color: "#E8C39A" }}>First Step House of Orange County</em>.
+                      </p>
+                      <p className="text-white/70 text-sm mt-1.5 leading-relaxed">
+                        Decade after decade — the same mission, expanded into the fine facility they operate today.
+                      </p>
+                    </div>
+                  </li>
+
+                  <li className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1" data-testid="ch-history-mcmillen">
+                    <div className="font-serif text-2xl md:text-3xl leading-none pt-0.5" style={{ color: "#E8C39A", fontStyle: "italic" }}>Now</div>
+                    <div>
+                      <p className="font-serif text-lg md:text-xl text-white leading-snug">
+                        The <em style={{ color: "#E8C39A" }}>McMillen Houses</em> — affordable, medium-term housing for up to <strong>24 men</strong>.
+                      </p>
+                      <p className="text-white/70 text-sm mt-1.5 leading-relaxed">
+                        Part of the Charlie Street ecosystem. Same standard, more beds, more chances to start over.
+                      </p>
+                    </div>
+                  </li>
+                </ol>
+              </div>
 
               <div className="mt-10 flex items-center gap-3">
                 <div className="h-px w-10" style={{ background: "#D4A373" }} />
