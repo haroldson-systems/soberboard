@@ -150,23 +150,23 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* COMMUNITY PILLARS — premium, distinct treatment */}
-      <section className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-16 lg:py-24" data-testid="community-pillars">
+      {/* COMMUNITY ROOTS — historical tribute, not commercial */}
+      <section className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-16 lg:py-24" data-testid="community-roots">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-end mb-10">
           <div className="md:col-span-7">
-            <p className="sb-overline" style={{ color: "#D4A373" }}>The Community Pillars</p>
+            <p className="sb-overline" style={{ color: "#D4A373" }}>Community Roots</p>
             <h2 className="mt-3 font-serif text-3xl lg:text-5xl text-[#2D3339] leading-[1.05]">
-              The houses, places, and people who built recovery in this community.
+              Honoring the history of the OC recovery community.
             </h2>
           </div>
           <p className="md:col-span-5 text-[#5C6670] leading-relaxed">
-            SoberBoard is new. The fellowship behind it is not. These pillars were here long before us — and
-            we're honored to give them a permanent home on the board.
+            SoberBoard is new. The fellowship behind it is not. The houses, clubs, and meetings here have
+            held this community together for decades — this space is a tribute, nothing more.
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-          {/* Founding Partner — Charlie Street */}
+          {/* Charlie Street — historical tribute */}
           <article
             className="lg:col-span-7 relative overflow-hidden rounded-3xl sb-grain"
             style={{ background: "linear-gradient(135deg, #1F3A4A 0%, #2B4C5F 55%, #3A6377 100%)" }}
@@ -188,11 +188,11 @@ export default function Landing() {
                   className="text-[10px] uppercase font-bold tracking-[0.32em]"
                   style={{ color: "#E8C39A" }}
                 >
-                  Founding Partner · Permanent
+                  A House With Roots
                 </span>
               </div>
 
-              <p className="mt-10 sb-overline text-white/55">House № 001 · Est. 1952</p>
+              <p className="mt-10 sb-overline text-white/55">Orange County · Est. 1952</p>
               <h3 className="mt-3 font-serif text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.04] tracking-tight" style={{ fontStyle: "italic", color: "#F3EFE7" }}>
                 Charlie Street
               </h3>
@@ -200,11 +200,12 @@ export default function Landing() {
                 className="mt-4 font-serif text-xl md:text-2xl leading-snug"
                 style={{ color: "#E8C39A" }}
               >
-                A Foundation of Recovery.
+                A foundation of recovery in Orange County.
               </p>
               <p className="mt-5 text-white/85 text-base md:text-lg leading-relaxed max-w-xl">
-                One of Orange County's most iconic houses, Charlie Street has been a cornerstone for the
-                community since the beginning. We are honored to have them as a permanent, free Founding Partner.
+                One of Orange County's most iconic houses, Charlie Street has been a cornerstone of the
+                recovery community since the beginning. We're sharing a piece of their story here as a
+                small tribute to the road they paved.
               </p>
 
               {/* Historical chronology */}
@@ -261,7 +262,7 @@ export default function Landing() {
               <div className="mt-10 flex items-center gap-3">
                 <div className="h-px w-10" style={{ background: "#D4A373" }} />
                 <span className="text-xs uppercase tracking-[0.28em]" style={{ color: "#D4A373" }}>
-                  Forever on the board · No fee, ever
+                  Honoring the road they paved
                 </span>
               </div>
             </div>
@@ -300,10 +301,13 @@ export default function Landing() {
                 </h3>
                 <div className="mt-6 pl-5 border-l-2" style={{ borderColor: "#D4A373" }}>
                   <p className="font-serif text-lg md:text-xl leading-snug text-[#2D3339]">
-                    Proud home of the <em style={{ color: "#A8754A" }}>longest-running Cocaine Anonymous (CA)</em>
+                    Home of the <em style={{ color: "#A8754A" }}>longest-running Cocaine Anonymous (CA)</em>
                     {" "}meeting in Orange County.
                   </p>
                 </div>
+                <p className="mt-5 text-sm text-[#5C6670] leading-relaxed">
+                  Noted here as a small tribute to a meeting and a clubhouse that have meant a lot to a lot of people.
+                </p>
               </div>
 
               <div className="mt-10 flex items-end justify-between gap-6">
