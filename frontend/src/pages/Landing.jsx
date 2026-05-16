@@ -303,12 +303,11 @@ export default function Landing() {
                 </h3>
                 <div className="mt-6 pl-5 border-l-2" style={{ borderColor: "#D4A373" }}>
                   <p className="font-serif text-lg md:text-xl leading-snug text-[#2D3339]">
-                    Home of the <em style={{ color: "#A8754A" }}>longest-running Cocaine Anonymous (CA)</em>
-                    {" "}meeting in Orange County.
+                    A cornerstone of Orange County's clubhouse tradition — <em style={{ color: "#A8754A" }}>a place where a lot of people got their start.</em>
                   </p>
                 </div>
                 <p className="mt-5 text-sm text-[#5C6670] leading-relaxed">
-                  Noted here as a small tribute to a meeting and a clubhouse that have meant a lot to a lot of people.
+                  Noted here as a small tribute to a clubhouse that has meant a lot to a lot of people.
                 </p>
               </div>
 
