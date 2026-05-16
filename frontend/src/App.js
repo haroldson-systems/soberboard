@@ -16,6 +16,7 @@ import Dashboard from "@/pages/Dashboard";
 import PostListing from "@/pages/PostListing";
 import JobsBoard from "@/pages/JobsBoard";
 import Services from "@/pages/Services";
+import Meetings from "@/pages/Meetings";
 import About from "@/pages/About";
 
 function AppRouter() {
@@ -38,6 +39,7 @@ function AppRouter() {
           <Route path="/post" element={<PostListing />} />
           <Route path="/jobs" element={<JobsBoard />} />
           <Route path="/services" element={<Services />} />
+          <Route path="/meetings" element={<Meetings />} />
           <Route path="/about" element={<About />} />
           <Route path="*" element={<Landing />} />
         </Routes>

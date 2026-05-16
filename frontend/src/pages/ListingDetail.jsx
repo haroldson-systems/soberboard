@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Phone, MapPin, Users, Bed, PawPrint, Waves, Car, CheckCircle2, Calendar } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, Users, Bed, PawPrint, Waves, Car, CheckCircle2, Calendar, ExternalLink } from "lucide-react";
 import api from "@/lib/api";
 import SponsoredAds from "@/components/SponsoredAds";
 import { publicUrl } from "@/components/ImageUploader";
@@ -99,6 +99,20 @@ export default function ListingDetail() {
             <p className="mt-3 text-xs text-[#8A94A0] leading-relaxed text-center">
               SoberBoard does not screen residents or operators. Always verify in person before paying any deposit.
             </p>
+
+            <div className="sb-divider my-5"/>
+            <p className="sb-overline">Meetings nearby</p>
+            <p className="mt-2 text-sm text-[#5C6670] leading-relaxed">
+              Find AA, NA, CA, and other meetings near {listing.city}. We point to the official directories
+              maintained by each fellowship.
+            </p>
+            <Link
+              to="/meetings"
+              className="mt-3 sb-btn-outline w-full inline-flex items-center justify-center gap-2 text-sm"
+              data-testid="find-meetings-btn"
+            >
+              Browse meeting finders <ExternalLink size={13}/>
+            </Link>
           </div>
 
           <SponsoredAds slot="sidebar" limit={2}/>

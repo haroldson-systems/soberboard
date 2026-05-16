@@ -353,6 +353,7 @@ export default function Landing() {
 
         <div className="lg:col-span-5 grid grid-cols-1 gap-5">
           <EcoCard to="/jobs" title="Jobs board" desc="Recovery-aware employers — businesses that understand the journey and offer support-focused environments." kicker="Hiring now"/>
+          <EcoCard to="/meetings" title="Find a meeting" desc="AA, NA, CA, Refuge Recovery, SMART — direct links to every fellowship's official meeting finder." kicker="All fellowships"/>
           <EcoCard to="/services" title="Services & legal help" desc="DUI attorneys, expungement, insurance navigators, food assistance, mental health." kicker="Free & low-cost"/>
           <EcoCard to="/about" title="Why SoberBoard is free" desc="Local businesses fund the board. We never charge operators or residents. Ever." kicker="Our promise" icon={<Heart size={18} strokeWidth={1.6}/>}/>
         </div>
