@@ -4,6 +4,7 @@ import { Search, ArrowRight, Heart, Sun, Quote, MapPin, Award, Landmark } from "
 import api from "@/lib/api";
 import BedCard from "@/components/BedCard";
 import SponsoredAds from "@/components/SponsoredAds";
+import DemoBanner from "@/components/DemoBanner";
 
 const HERO_IMG = "https://images.unsplash.com/photo-1737224695288-0f2b8d030d33?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwyfHxzb3V0aGVybiUyMGNhbGlmb3JuaWElMjBiZWFjaCUyMHN1bnJpc2V8ZW58MHx8fHwxNzc4MTM0MTI5fDA&ixlib=rb-4.1.0&q=85";
 const REFLECTION_IMG = "https://images.unsplash.com/photo-1575835760958-07fb64d1f659?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHw0fHxzb3V0aGVybiUyMGNhbGlmb3JuaWElMjBiZWFjaCUyMHN1bnJpc2V8ZW58MHx8fHwxNzc4MTM0MTI5fDA&ixlib=rb-4.1.0&q=85";
@@ -112,6 +113,7 @@ export default function Landing() {
             See all listings <ArrowRight size={16}/>
           </Link>
         </div>
+        <DemoBanner className="mb-6" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {featured.map((l, i) => <BedCard key={l.listing_id} listing={l} index={i}/>)}
         </div>
@@ -188,7 +190,7 @@ export default function Landing() {
                   className="text-[10px] uppercase font-bold tracking-[0.32em]"
                   style={{ color: "#E8C39A" }}
                 >
-                  A House With Roots
+                  Historical Tribute · Honoring Our Roots
                 </span>
               </div>
 
@@ -288,7 +290,7 @@ export default function Landing() {
                   className="text-[10px] uppercase font-bold tracking-[0.32em]"
                   style={{ color: "#A8754A" }}
                 >
-                  Historical Highlight
+                  Historical Tribute · Honoring Our Roots
                 </span>
               </div>
             </div>
@@ -350,7 +352,7 @@ export default function Landing() {
         </div>
 
         <div className="lg:col-span-5 grid grid-cols-1 gap-5">
-          <EcoCard to="/jobs" title="Jobs board" desc="Recovery-friendly employers across California (and growing). Background-aware, second-chance hiring." kicker="Hiring now"/>
+          <EcoCard to="/jobs" title="Jobs board" desc="Recovery-aware employers — businesses that understand the journey and offer support-focused environments." kicker="Hiring now"/>
           <EcoCard to="/services" title="Services & legal help" desc="DUI attorneys, expungement, insurance navigators, food assistance, mental health." kicker="Free & low-cost"/>
           <EcoCard to="/about" title="Why SoberBoard is free" desc="Local businesses fund the board. We never charge operators or residents. Ever." kicker="Our promise" icon={<Heart size={18} strokeWidth={1.6}/>}/>
         </div>

@@ -4,6 +4,7 @@ import { Search, SlidersHorizontal, MapPin } from "lucide-react";
 import api from "@/lib/api";
 import BedCard from "@/components/BedCard";
 import SponsoredAds from "@/components/SponsoredAds";
+import DemoBanner from "@/components/DemoBanner";
 
 export default function BedsDirectory() {
   const [params, setParams] = useSearchParams();
@@ -77,6 +78,8 @@ export default function BedsDirectory() {
           </p>
         </div>
       </div>
+
+      <DemoBanner className="mb-6" />
 
       {regions.length > 0 && (
         <div className="mb-6 flex flex-wrap gap-2" data-testid="region-chips">

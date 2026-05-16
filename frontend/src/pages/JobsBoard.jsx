@@ -20,11 +20,11 @@ export default function JobsBoard() {
         <div className="md:col-span-7">
           <p className="sb-overline">Work that gets it</p>
           <h1 className="mt-3 font-serif text-4xl lg:text-5xl text-[#2D3339] leading-[1.05]">
-            Jobs that don't fire you for relapsing.
+            Recovery-aware employers.
           </h1>
           <p className="mt-4 text-[#5C6670] text-lg max-w-xl">
-            Recovery-friendly employers across California (and growing). Background-aware, second-chance hiring,
-            flexible with treatment schedules.
+            Businesses that understand the journey and offer support-focused environments — across
+            California and growing.
           </p>
         </div>
         <div className="md:col-span-5 md:flex md:items-end">
