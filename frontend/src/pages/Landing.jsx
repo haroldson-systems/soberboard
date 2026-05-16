@@ -168,7 +168,7 @@ export default function Landing() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-          {/* Charlie Street — historical tribute */}
+          {/* Charle Street — historical tribute */}
           <article
             className="lg:col-span-7 relative overflow-hidden rounded-3xl sb-grain"
             style={{ background: "linear-gradient(135deg, #1F3A4A 0%, #2B4C5F 55%, #3A6377 100%)" }}
@@ -196,7 +196,7 @@ export default function Landing() {
 
               <p className="mt-10 sb-overline text-white/55">Orange County · Est. 1952</p>
               <h3 className="mt-3 font-serif text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.04] tracking-tight" style={{ fontStyle: "italic", color: "#F3EFE7" }}>
-                Charlie Street
+                Charle Street
               </h3>
               <p
                 className="mt-4 font-serif text-xl md:text-2xl leading-snug"
@@ -205,7 +205,7 @@ export default function Landing() {
                 A foundation of recovery in Orange County.
               </p>
               <p className="mt-5 text-white/85 text-base md:text-lg leading-relaxed max-w-xl">
-                One of Orange County's most iconic houses, Charlie Street has been a cornerstone of the
+                One of Orange County's most iconic houses, Charle Street has been a cornerstone of the
                 recovery community since the beginning. We're sharing a piece of their story here as a
                 small tribute to the road they paved.
               </p>
@@ -254,7 +254,7 @@ export default function Landing() {
                         The <em style={{ color: "#E8C39A" }}>McMillen Houses</em> — affordable, medium-term housing for up to <strong>24 men</strong>.
                       </p>
                       <p className="text-white/70 text-sm mt-1.5 leading-relaxed">
-                        Part of the Charlie Street ecosystem. Same standard, more beds, more chances to start over.
+                        Part of the Charle Street ecosystem. Same standard, more beds, more chances to start over.
                       </p>
                     </div>
                   </li>
