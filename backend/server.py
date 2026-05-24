@@ -824,6 +824,9 @@ async def on_startup():
         })
 
     # Seed listings + backfill state/region for any existing rows
+    # Demo listings get a long expiry so they never drop off the showcase.
+    DEMO_EXPIRY_DAYS = 365
+    demo_expiry_iso = (datetime.now(timezone.utc) + timedelta(days=DEMO_EXPIRY_DAYS)).isoformat()
     if await db.listings.count_documents({}) == 0:
         for s in SEED_LISTINGS:
             state, region = infer_region(s["city"], s["zip_code"])
@@ -836,7 +839,7 @@ async def on_startup():
                 "status": "active",
                 "created_at": _now_iso(),
                 "updated_at": _now_iso(),
-                "expires_at": _expiry_iso(),
+                "expires_at": demo_expiry_iso,
             }
             await db.listings.insert_one(doc)
     else:
@@ -859,8 +862,15 @@ async def on_startup():
                 "status": "active",
                 "created_at": _now_iso(),
                 "updated_at": _now_iso(),
-                "expires_at": _expiry_iso(),
+                "expires_at": demo_expiry_iso,
             })
+
+    # ALWAYS keep demo listings active + far from expiring, so the showcase never goes empty.
+    # Real listings (other users) still auto-expire after 7 days as designed.
+    await db.listings.update_many(
+        {"user_id": "user_demo00manager"},
+        {"$set": {"status": "active", "expires_at": demo_expiry_iso, "updated_at": _now_iso()}},
+    )
 
     # Seed jobs
     if await db.jobs.count_documents({}) == 0:
