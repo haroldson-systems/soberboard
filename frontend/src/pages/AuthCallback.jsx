@@ -1,11 +1,11 @@
 import React, { useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { setUser } = useAuth();
   const processed = useRef(false);
 
@@ -13,24 +13,22 @@ export default function AuthCallback() {
     if (processed.current) return;
     processed.current = true;
 
-    const hash = location.hash || window.location.hash || "";
-    const match = hash.match(/session_id=([^&]+)/);
-    if (!match) {
+    const code = searchParams.get("code");
+    if (!code) {
       navigate("/login", { replace: true });
       return;
     }
-    const sessionId = decodeURIComponent(match[1]);
-    api.post("/auth/google/session", { session_id: sessionId })
+
+    const redirectUri = window.location.origin + "/auth/callback";
+    api.post("/auth/google/callback", { code, redirect_uri: redirectUri })
       .then((r) => {
         setUser(r.data);
-        // strip hash and go to dashboard
-        window.history.replaceState({}, document.title, "/dashboard");
         navigate("/dashboard", { replace: true });
       })
       .catch(() => {
         navigate("/login?error=oauth", { replace: true });
       });
-  }, [location.hash, navigate, setUser]);
+  }, [searchParams, navigate, setUser]);
 
   return (
     <div className="min-h-[60vh] grid place-items-center" data-testid="auth-callback-page">
