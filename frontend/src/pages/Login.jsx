@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatApiError } from "@/lib/api";
+import api, { formatApiError } from "@/lib/api";
 
 export default function Login() {
   const { login } = useAuth();
@@ -25,10 +25,14 @@ export default function Login() {
     }
   };
 
-  const onGoogle = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/dashboard";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  const onGoogle = async () => {
+    try {
+      const redirectUri = window.location.origin + "/auth/callback";
+      const { data } = await api.get(`/auth/google/url?redirect_uri=${encodeURIComponent(redirectUri)}`);
+      window.location.href = data.url;
+    } catch {
+      setError("Google sign-in is not available right now.");
+    }
   };
 
   return (

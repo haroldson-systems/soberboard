@@ -1,6 +1,6 @@
 import React from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Header from "@/components/layout/Header";
@@ -20,11 +20,6 @@ import Meetings from "@/pages/Meetings";
 import About from "@/pages/About";
 
 function AppRouter() {
-  const location = useLocation();
-  // Synchronous check to handle Emergent OAuth callback BEFORE normal routes
-  if (location.hash?.includes("session_id=") || (typeof window !== "undefined" && window.location.hash?.includes("session_id="))) {
-    return <AuthCallback />;
-  }
   return (
     <>
       <Header />
@@ -35,6 +30,7 @@ function AppRouter() {
           <Route path="/beds/:id" element={<ListingDetail />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/post" element={<PostListing />} />
           <Route path="/jobs" element={<JobsBoard />} />
