@@ -5,11 +5,12 @@ import api, { API_BASE, formatApiError } from "@/lib/api";
 const MAX_IMAGES = 6;
 const MAX_BYTES = 8 * 1024 * 1024;
 
-function publicUrl(path) {
-  // Cloudinary and other absolute URLs pass through unchanged
-  if (path && (path.startsWith("http://") || path.startsWith("https://"))) return path;
-  // Fallback for any relative paths still in the DB
-  return `${API_BASE}/files/${path}`;
+function publicUrl(url) {
+  // Cloudinary and other absolute URLs pass through unchanged.
+  if (!url) return "";
+  if (/^(https?:|data:|blob:)/.test(url)) return url;
+  // Fallback for any relative paths still in the DB.
+  return `${API_BASE}/files/${url}`;
 }
 
 export default function ImageUploader({ value = [], onChange }) {

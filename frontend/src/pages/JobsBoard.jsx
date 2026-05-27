@@ -9,7 +9,9 @@ export default function JobsBoard() {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      api.get(`/jobs${q ? `?q=${encodeURIComponent(q)}` : ""}`).then(r => setJobs(r.data));
+      api.get(`/jobs${q ? `?q=${encodeURIComponent(q)}` : ""}`)
+        .then(r => setJobs(r.data))
+        .catch(() => setJobs([]));
     }, 200);
     return () => clearTimeout(t);
   }, [q]);

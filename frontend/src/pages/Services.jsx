@@ -8,7 +8,9 @@ export default function Services() {
   const [category, setCategory] = useState("all");
 
   useEffect(() => {
-    api.get(`/services${category !== "all" ? `?category=${encodeURIComponent(category)}` : ""}`).then(r => setServices(r.data));
+    api.get(`/services${category !== "all" ? `?category=${encodeURIComponent(category)}` : ""}`)
+      .then(r => setServices(r.data))
+      .catch(() => setServices([]));
   }, [category]);
 
   const categories = useMemo(() => {

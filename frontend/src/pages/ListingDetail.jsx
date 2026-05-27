@@ -4,6 +4,7 @@ import { ArrowLeft, Phone, MapPin, Users, Bed, PawPrint, Waves, Car, CheckCircle
 import api from "@/lib/api";
 import SponsoredAds from "@/components/SponsoredAds";
 import { publicUrl } from "@/components/ImageUploader";
+import { getDemoListing, shouldUseDemoFallback } from "@/lib/demoData";
 
 export default function ListingDetail() {
   const { id } = useParams();
@@ -11,7 +12,11 @@ export default function ListingDetail() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.get(`/listings/${id}`).then(r => setListing(r.data)).catch(() => setError("Listing not found"));
+    api.get(`/listings/${id}`).then(r => setListing(r.data)).catch(() => {
+      const demoListing = shouldUseDemoFallback ? getDemoListing(id) : null;
+      if (demoListing) setListing(demoListing);
+      else setError("Listing not found");
+    });
   }, [id]);
 
   if (error) return <div className="max-w-3xl mx-auto px-5 py-20 text-center"><p className="font-serif text-3xl">{error}</p><Link to="/beds" className="sb-btn-outline mt-6 inline-block">Back to beds</Link></div>;

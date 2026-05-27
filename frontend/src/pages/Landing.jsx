@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import BedCard from "@/components/BedCard";
 import SponsoredAds from "@/components/SponsoredAds";
 import DemoBanner from "@/components/DemoBanner";
+import { demoListings, demoReflection, demoRegions, demoStats, shouldUseDemoFallback } from "@/lib/demoData";
 
 const HERO_IMG = "https://images.unsplash.com/photo-1737224695288-0f2b8d030d33?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwyfHxzb3V0aGVybiUyMGNhbGlmb3JuaWElMjBiZWFjaCUyMHN1bnJpc2V8ZW58MHx8fHwxNzc4MTM0MTI5fDA&ixlib=rb-4.1.0&q=85";
 const REFLECTION_IMG = "https://images.unsplash.com/photo-1575835760958-07fb64d1f659?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHw0fHxzb3V0aGVybiUyMGNhbGlmb3JuaWElMjBiZWFjaCUyMHN1bnJpc2V8ZW58MHx8fHwxNzc4MTM0MTI5fDA&ixlib=rb-4.1.0&q=85";
@@ -18,10 +19,18 @@ export default function Landing() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get("/stats").then(r => setStats(r.data)).catch(() => {});
-    api.get("/listings").then(r => setFeatured(r.data.slice(0, 6))).catch(() => {});
-    api.get("/reflection/today").then(r => setReflection(r.data)).catch(() => {});
-    api.get("/regions").then(r => setRegions(r.data)).catch(() => {});
+    api.get("/stats").then(r => setStats(r.data)).catch(() => {
+      if (shouldUseDemoFallback) setStats(demoStats);
+    });
+    api.get("/listings").then(r => setFeatured(r.data.slice(0, 6))).catch(() => {
+      if (shouldUseDemoFallback) setFeatured(demoListings.slice(0, 6));
+    });
+    api.get("/reflection/today").then(r => setReflection(r.data)).catch(() => {
+      if (shouldUseDemoFallback) setReflection(demoReflection);
+    });
+    api.get("/regions").then(r => setRegions(r.data)).catch(() => {
+      if (shouldUseDemoFallback) setRegions(demoRegions);
+    });
   }, []);
 
   const onSearch = (e) => {

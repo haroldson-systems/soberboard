@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import BedCard from "@/components/BedCard";
 import SponsoredAds from "@/components/SponsoredAds";
 import DemoBanner from "@/components/DemoBanner";
+import { demoRegions, getDemoListings, shouldUseDemoFallback } from "@/lib/demoData";
 
 export default function BedsDirectory() {
   const [params, setParams] = useSearchParams();
@@ -21,7 +22,9 @@ export default function BedsDirectory() {
   const maxPrice = params.get("max_price") || "";
 
   useEffect(() => {
-    api.get("/regions").then(r => setRegions(r.data)).catch(() => {});
+    api.get("/regions").then(r => setRegions(r.data)).catch(() => {
+      if (shouldUseDemoFallback) setRegions(demoRegions);
+    });
   }, []);
 
   useEffect(() => {
@@ -36,6 +39,7 @@ export default function BedsDirectory() {
     if (maxPrice) search.set("max_price", maxPrice);
     api.get(`/listings?${search.toString()}`)
       .then(r => setAll(r.data))
+      .catch(() => setAll(shouldUseDemoFallback ? getDemoListings({ q, city, state, region, gender, pets, maxPrice }) : []))
       .finally(() => setLoading(false));
   }, [q, city, state, region, gender, pets, maxPrice]);
 

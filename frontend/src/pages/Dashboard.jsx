@@ -23,10 +23,17 @@ export default function Dashboard() {
   const { user, loading } = useAuth();
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState(null);
+  const [error, setError] = useState("");
 
   const load = async () => {
-    const r = await api.get("/listings/mine");
-    setItems(r.data);
+    try {
+      setError("");
+      const r = await api.get("/listings/mine");
+      setItems(r.data);
+    } catch {
+      setItems([]);
+      setError("Could not load your listings right now.");
+    }
   };
 
   useEffect(() => {
@@ -38,15 +45,25 @@ export default function Dashboard() {
 
   const onDeactivate = async (id) => {
     setBusy(id);
-    await api.post(`/listings/${id}/deactivate`);
-    await load();
-    setBusy(null);
+    try {
+      await api.post(`/listings/${id}/deactivate`);
+      await load();
+    } catch {
+      setError("Could not update that listing right now.");
+    } finally {
+      setBusy(null);
+    }
   };
   const onReactivate = async (id) => {
     setBusy(id);
-    await api.post(`/listings/${id}/reactivate`);
-    await load();
-    setBusy(null);
+    try {
+      await api.post(`/listings/${id}/reactivate`);
+      await load();
+    } catch {
+      setError("Could not update that listing right now.");
+    } finally {
+      setBusy(null);
+    }
   };
 
   const active = items.filter(i => i.status === "active");
@@ -64,6 +81,7 @@ export default function Dashboard() {
         </div>
         <Link to="/post" className="sb-btn-primary inline-flex items-center gap-2" data-testid="dashboard-post-btn"><Plus size={16}/> Post a bed</Link>
       </div>
+      {error && <p className="mt-5 text-sm text-[#C26D53]" data-testid="dashboard-error">{error}</p>}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-10">
         <Stat label="Total listings" value={items.length}/>
