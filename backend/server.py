@@ -10,6 +10,7 @@ import logging
 import secrets
 import bcrypt
 import jwt
+import httpx
 import cloudinary
 import cloudinary.uploader
 from datetime import datetime, timezone, timedelta
@@ -257,10 +258,7 @@ async def login(body: LoginIn, response: Response, request: Request):
 
 
 @api_router.post("/auth/logout")
-async def logout(response: Response, request: Request):
-    session_token = request.cookies.get("session_token")
-    if session_token:
-        await db.user_sessions.delete_one({"session_token": session_token})
+async def logout(response: Response):
     clear_auth_cookies(response)
     return {"ok": True}
 
@@ -269,6 +267,109 @@ async def logout(response: Response, request: Request):
 async def me(user: dict = Depends(get_current_user)):
     return user
 
+
+# ============== GOOGLE OAUTH ==============
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+
+
+def _google_client_id() -> Optional[str]:
+    return os.environ.get("GOOGLE_CLIENT_ID")
+
+
+def _google_client_secret() -> Optional[str]:
+    return os.environ.get("GOOGLE_CLIENT_SECRET")
+
+
+@api_router.get("/auth/google/url")
+async def google_auth_url(redirect_uri: str = ""):
+    """Return the Google OAuth consent URL for the frontend to redirect to."""
+    client_id = _google_client_id()
+    if not client_id:
+        raise HTTPException(status_code=503, detail="Google OAuth not configured")
+    if not redirect_uri:
+        redirect_uri = os.environ.get("FRONTEND_URL", "http://localhost:3000") + "/auth/callback"
+    from urllib.parse import urlencode
+    params = urlencode({
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+    })
+    return {"url": f"https://accounts.google.com/o/oauth2/v2/auth?{params}"}
+
+
+@api_router.post("/auth/google/callback")
+async def google_callback(request: Request, response: Response):
+    """Exchange Google auth code for tokens, create/login user, set JWT cookies."""
+    body = await request.json()
+    code = body.get("code")
+    redirect_uri = body.get("redirect_uri", "")
+    if not code:
+        raise HTTPException(status_code=400, detail="Authorization code required")
+    client_id = _google_client_id()
+    client_secret = _google_client_secret()
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=503, detail="Google OAuth not configured")
+    if not redirect_uri:
+        redirect_uri = os.environ.get("FRONTEND_URL", "http://localhost:3000") + "/auth/callback"
+
+    # Exchange code for tokens
+    async with httpx.AsyncClient(timeout=10.0) as http:
+        token_resp = await http.post(GOOGLE_TOKEN_URL, data={
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        })
+    if token_resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Failed to exchange authorization code")
+    tokens = token_resp.json()
+    access_token = tokens.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=401, detail="No access token from Google")
+
+    # Get user info
+    async with httpx.AsyncClient(timeout=10.0) as http:
+        info_resp = await http.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"})
+    if info_resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Failed to get user info from Google")
+    info = info_resp.json()
+    email = info.get("email", "").lower().strip()
+    name = info.get("name") or email.split("@")[0]
+    picture = info.get("picture")
+    if not email:
+        raise HTTPException(status_code=400, detail="No email from Google")
+
+    # Create or update user
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        user_id = existing["user_id"]
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"name": name, "picture": picture, "auth_provider": existing.get("auth_provider", "google")}},
+        )
+    else:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": user_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+            "role": "manager",
+            "auth_provider": "google",
+            "password_hash": None,
+            "phone": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # Set JWT cookies (same as email/password login)
+    set_jwt_cookies(response, create_access_token(user_id, email), create_refresh_token(user_id))
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return user
 
 
 # ============== LISTINGS ==============
