@@ -11,7 +11,8 @@ import secrets
 import bcrypt
 import jwt
 import httpx
-import requests
+import cloudinary
+import cloudinary.uploader
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -78,18 +79,13 @@ def set_jwt_cookies(response: Response, access: str, refresh: str):
                         samesite="none", max_age=JWT_REFRESH_DAYS * 86400, path="/")
 
 
-def set_session_cookie(response: Response, session_token: str):
-    response.set_cookie("session_token", session_token, httponly=True, secure=True,
-                        samesite="none", max_age=7 * 86400, path="/")
-
-
 def clear_auth_cookies(response: Response):
-    for name in ("access_token", "refresh_token", "session_token"):
+    for name in ("access_token", "refresh_token"):
         response.delete_cookie(name, path="/")
 
 
 async def get_current_user(request: Request) -> dict:
-    """Resolve user from either JWT access_token or Emergent session_token cookie/header."""
+    """Resolve user from JWT access_token cookie or Authorization header."""
     # 1. Try JWT
     token = request.cookies.get("access_token")
     if not token:
@@ -105,25 +101,6 @@ async def get_current_user(request: Request) -> dict:
                     return user
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
             pass
-
-    # 2. Try Emergent session
-    session_token = request.cookies.get("session_token")
-    if not session_token:
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            session_token = auth[7:]
-    if session_token:
-        sess = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
-        if sess:
-            expires_at = sess["expires_at"]
-            if isinstance(expires_at, str):
-                expires_at = datetime.fromisoformat(expires_at)
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            if expires_at >= datetime.now(timezone.utc):
-                user = await db.users.find_one({"user_id": sess["user_id"]}, {"_id": 0, "password_hash": 0})
-                if user:
-                    return user
 
     raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -181,70 +158,49 @@ class ListingOut(ListingIn):
     image_url: Optional[str] = None
 
 
-# ============== OBJECT STORAGE ==============
-STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
-APP_NAME = "soberboard"
-_storage_key: Optional[str] = None
+# ============== CLOUDINARY IMAGE STORAGE ==============
 MIME_TYPES = {
     "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
     "gif": "image/gif", "webp": "image/webp", "heic": "image/heic",
 }
 MAX_IMAGES_PER_LISTING = 6
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
+_cloudinary_configured = False
 
 
-def init_storage() -> Optional[str]:
-    global _storage_key
-    if _storage_key:
-        return _storage_key
-    emergent_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not emergent_key:
-        return None
-    try:
-        r = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": emergent_key}, timeout=15)
-        r.raise_for_status()
-        _storage_key = r.json().get("storage_key")
-        return _storage_key
-    except Exception as e:
-        logging.getLogger("soberboard").warning(f"Storage init failed: {e}")
-        return None
-
-
-def put_object(path: str, data: bytes, content_type: str) -> dict:
-    key = init_storage()
-    if not key:
-        raise HTTPException(status_code=503, detail="Storage unavailable")
-    r = requests.put(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key, "Content-Type": content_type},
-        data=data, timeout=60,
+def init_cloudinary() -> bool:
+    """Initialize Cloudinary from environment variables."""
+    global _cloudinary_configured
+    if _cloudinary_configured:
+        return True
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME")
+    api_key = os.environ.get("CLOUDINARY_API_KEY")
+    api_secret = os.environ.get("CLOUDINARY_API_SECRET")
+    if not all([cloud_name, api_key, api_secret]):
+        return False
+    cloudinary.config(
+        cloud_name=cloud_name,
+        api_key=api_key,
+        api_secret=api_secret,
+        secure=True,
     )
-    if r.status_code == 403:
-        # Refresh key and retry once
-        global _storage_key
-        _storage_key = None
-        key = init_storage()
-        r = requests.put(
-            f"{STORAGE_URL}/objects/{path}",
-            headers={"X-Storage-Key": key, "Content-Type": content_type},
-            data=data, timeout=60,
-        )
-    r.raise_for_status()
-    return r.json()
+    _cloudinary_configured = True
+    return True
 
 
-def get_object(path: str) -> tuple:
-    key = init_storage()
-    if not key:
-        raise HTTPException(status_code=503, detail="Storage unavailable")
-    r = requests.get(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key}, timeout=60,
+def upload_to_cloudinary(data: bytes, public_id: str, content_type: str) -> str:
+    """Upload image bytes to Cloudinary, return the secure URL."""
+    if not init_cloudinary():
+        raise HTTPException(status_code=503, detail="Image storage unavailable")
+    import io
+    result = cloudinary.uploader.upload(
+        io.BytesIO(data),
+        public_id=public_id,
+        resource_type="image",
+        folder="soberboard",
+        overwrite=True,
     )
-    if r.status_code == 404:
-        raise HTTPException(status_code=404, detail="File not found")
-    r.raise_for_status()
-    return r.content, r.headers.get("Content-Type", "application/octet-stream")
+    return result["secure_url"]
 
 
 # ============== AUTH ENDPOINTS ==============
@@ -302,10 +258,7 @@ async def login(body: LoginIn, response: Response, request: Request):
 
 
 @api_router.post("/auth/logout")
-async def logout(response: Response, request: Request):
-    session_token = request.cookies.get("session_token")
-    if session_token:
-        await db.user_sessions.delete_one({"session_token": session_token})
+async def logout(response: Response):
     clear_auth_cookies(response)
     return {"ok": True}
 
@@ -315,26 +268,83 @@ async def me(user: dict = Depends(get_current_user)):
     return user
 
 
-@api_router.post("/auth/google/session")
-async def google_session(request: Request, response: Response):
-    """Process Emergent OAuth session_id and create app session."""
-    body = await request.json()
-    session_id = body.get("session_id")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id required")
-    async with httpx.AsyncClient(timeout=10.0) as http:
-        r = await http.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": session_id},
-        )
-    if r.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid session")
-    data = r.json()
-    email = data["email"].lower().strip()
-    name = data.get("name") or email.split("@")[0]
-    picture = data.get("picture")
-    session_token = data["session_token"]
+# ============== GOOGLE OAUTH ==============
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
+
+def _google_client_id() -> Optional[str]:
+    return os.environ.get("GOOGLE_CLIENT_ID")
+
+
+def _google_client_secret() -> Optional[str]:
+    return os.environ.get("GOOGLE_CLIENT_SECRET")
+
+
+@api_router.get("/auth/google/url")
+async def google_auth_url(redirect_uri: str = ""):
+    """Return the Google OAuth consent URL for the frontend to redirect to."""
+    client_id = _google_client_id()
+    if not client_id:
+        raise HTTPException(status_code=503, detail="Google OAuth not configured")
+    if not redirect_uri:
+        redirect_uri = os.environ.get("FRONTEND_URL", "http://localhost:3000") + "/auth/callback"
+    from urllib.parse import urlencode
+    params = urlencode({
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+    })
+    return {"url": f"https://accounts.google.com/o/oauth2/v2/auth?{params}"}
+
+
+@api_router.post("/auth/google/callback")
+async def google_callback(request: Request, response: Response):
+    """Exchange Google auth code for tokens, create/login user, set JWT cookies."""
+    body = await request.json()
+    code = body.get("code")
+    redirect_uri = body.get("redirect_uri", "")
+    if not code:
+        raise HTTPException(status_code=400, detail="Authorization code required")
+    client_id = _google_client_id()
+    client_secret = _google_client_secret()
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=503, detail="Google OAuth not configured")
+    if not redirect_uri:
+        redirect_uri = os.environ.get("FRONTEND_URL", "http://localhost:3000") + "/auth/callback"
+
+    # Exchange code for tokens
+    async with httpx.AsyncClient(timeout=10.0) as http:
+        token_resp = await http.post(GOOGLE_TOKEN_URL, data={
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        })
+    if token_resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Failed to exchange authorization code")
+    tokens = token_resp.json()
+    access_token = tokens.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=401, detail="No access token from Google")
+
+    # Get user info
+    async with httpx.AsyncClient(timeout=10.0) as http:
+        info_resp = await http.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"})
+    if info_resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Failed to get user info from Google")
+    info = info_resp.json()
+    email = info.get("email", "").lower().strip()
+    name = info.get("name") or email.split("@")[0]
+    picture = info.get("picture")
+    if not email:
+        raise HTTPException(status_code=400, detail="No email from Google")
+
+    # Create or update user
     existing = await db.users.find_one({"email": email})
     if existing:
         user_id = existing["user_id"]
@@ -351,18 +361,13 @@ async def google_session(request: Request, response: Response):
             "picture": picture,
             "role": "manager",
             "auth_provider": "google",
+            "password_hash": None,
             "phone": None,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-    await db.user_sessions.insert_one({
-        "user_id": user_id,
-        "session_token": session_token,
-        "expires_at": expires_at.isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-    set_session_cookie(response, session_token)
+    # Set JWT cookies (same as email/password login)
+    set_jwt_cookies(response, create_access_token(user_id, email), create_refresh_token(user_id))
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
     return user
 
@@ -602,8 +607,7 @@ async def root():
 # ============== UPLOADS ==============
 @api_router.post("/uploads/image")
 async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Operator-uploaded listing photos. Returns the storage path; frontend stores
-    that on the listing's image_urls array and renders via /api/files/{path}."""
+    """Operator-uploaded listing photos. Returns the Cloudinary CDN URL directly."""
     ext = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
     if ext not in MIME_TYPES:
         raise HTTPException(status_code=400, detail="Only JPG, PNG, GIF, WEBP, or HEIC images are supported")
@@ -613,31 +617,20 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_cu
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="Empty file")
     content_type = file.content_type or MIME_TYPES.get(ext, "application/octet-stream")
-    path = f"{APP_NAME}/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
-    result = put_object(path, data, content_type)
-    stored_path = result.get("path", path)
+    public_id = f"{user['user_id']}/{uuid.uuid4().hex}"
+    cdn_url = upload_to_cloudinary(data, public_id, content_type)
     await db.uploaded_files.insert_one({
         "id": str(uuid.uuid4()),
         "user_id": user["user_id"],
-        "storage_path": stored_path,
+        "cdn_url": cdn_url,
+        "public_id": public_id,
         "original_filename": file.filename,
         "content_type": content_type,
-        "size": result.get("size", len(data)),
+        "size": len(data),
         "is_deleted": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    return {"path": stored_path, "url": f"/api/files/{stored_path}"}
-
-
-@api_router.get("/files/{path:path}")
-async def serve_file(path: str):
-    """Public file proxy. Listings are public so listing photos are public too;
-    paths are UUID-based and unguessable."""
-    record = await db.uploaded_files.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
-    if not record:
-        raise HTTPException(status_code=404, detail="File not found")
-    data, content_type = get_object(path)
-    return Response(content=data, media_type=record.get("content_type") or content_type, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    return {"url": cdn_url}
 
 
 # ============== STARTUP / SEED ==============
@@ -767,14 +760,14 @@ SEED_ADS = [
 
 @app.on_event("startup")
 async def on_startup():
-    # Storage init (best-effort — auth still works without storage)
+    # Cloudinary init (best-effort — auth still works without storage)
     try:
-        if init_storage():
-            logging.getLogger("soberboard").info("Object storage initialized")
+        if init_cloudinary():
+            logging.getLogger("soberboard").info("Cloudinary image storage initialized")
         else:
-            logging.getLogger("soberboard").warning("Object storage not available — image uploads disabled")
+            logging.getLogger("soberboard").warning("Cloudinary not configured — image uploads disabled")
     except Exception as e:
-        logging.getLogger("soberboard").warning(f"Storage init failed at startup: {e}")
+        logging.getLogger("soberboard").warning(f"Cloudinary init failed at startup: {e}")
 
     # Indexes
     await db.users.create_index("email", unique=True)
@@ -898,8 +891,7 @@ app.include_router(api_router)
 
 # CORS - allow credentials with explicit frontend origin
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-preview_url = "https://recovery-beds.preview.emergentagent.com"
-allowed_origins = list({frontend_url, preview_url, "http://localhost:3000"})
+allowed_origins = list({frontend_url, "http://localhost:3000", "https://soberboard.com", "https://www.soberboard.com"})
 
 app.add_middleware(
     CORSMiddleware,
