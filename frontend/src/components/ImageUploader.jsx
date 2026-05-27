@@ -6,6 +6,9 @@ const MAX_IMAGES = 6;
 const MAX_BYTES = 8 * 1024 * 1024;
 
 function publicUrl(path) {
+  // Cloudinary and other absolute URLs pass through unchanged
+  if (path && (path.startsWith("http://") || path.startsWith("https://"))) return path;
+  // Fallback for any relative paths still in the DB
   return `${API_BASE}/files/${path}`;
 }
 
@@ -32,7 +35,7 @@ export default function ImageUploader({ value = [], onChange }) {
         const fd = new FormData();
         fd.append("file", f);
         const r = await api.post("/uploads/image", fd, { headers: { "Content-Type": "multipart/form-data" } });
-        next.push(r.data.path);
+        next.push(r.data.url);
         onChange([...next]);
       } catch (err) {
         setError(formatApiError(err.response?.data?.detail) || "Upload failed");
