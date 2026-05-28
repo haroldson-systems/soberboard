@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
+import ScrollToTop from "@/components/ScrollToTop";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 
@@ -22,6 +23,7 @@ import About from "@/pages/About";
 function AppRouter() {
   return (
     <>
+      <ScrollToTop />
       <Header />
       <main className="App">
         <Routes>

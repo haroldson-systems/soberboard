@@ -92,7 +92,7 @@ export default function ListingDetail() {
         </div>
 
         <aside className="lg:col-span-4 space-y-5">
-          <div className="sb-card p-7 sticky top-24" data-testid="contact-card">
+          <div className="sb-card p-7" data-testid="contact-card">
             <p className="sb-overline">Pricing</p>
             <p className="mt-2 font-serif text-3xl text-[#2D3339]">{price}{monthly}</p>
             <div className="sb-divider my-5"/>
