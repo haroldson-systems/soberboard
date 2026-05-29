@@ -519,9 +519,10 @@ async def reactivate_listing(listing_id: str, user: dict = Depends(get_current_u
         raise HTTPException(status_code=404, detail="Listing not found")
     if item["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="Forbidden")
+    now = _now_iso()
     await db.listings.update_one(
         {"listing_id": listing_id},
-        {"$set": {"status": "active", "updated_at": _now_iso(), "expires_at": _expiry_iso()}},
+        {"$set": {"status": "active", "created_at": now, "updated_at": now, "expires_at": _expiry_iso()}},
     )
     return {"ok": True, "status": "active", "expires_at": _expiry_iso()}
 
