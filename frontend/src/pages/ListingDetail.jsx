@@ -1,16 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Phone, MapPin, Users, Bed, PawPrint, Waves, Car, CheckCircle2, Calendar, ExternalLink, ClipboardCheck, ShieldCheck, Heart } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, Users, Bed, PawPrint, Waves, Car, CheckCircle2, Calendar, ExternalLink, ClipboardCheck, ShieldCheck, Heart, Flag } from "lucide-react";
 import api from "@/lib/api";
 import SponsoredAds from "@/components/SponsoredAds";
 import { publicUrl } from "@/components/ImageUploader";
 import { getDemoListing, shouldUseDemoFallback } from "@/lib/demoData";
 import { useFavorites } from "@/lib/favorites";
+import { listingTrustBadges } from "@/lib/listingTrust";
 
 export default function ListingDetail() {
   const { id } = useParams();
   const [listing, setListing] = useState(null);
   const [error, setError] = useState(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [report, setReport] = useState({ reason: "No beds actually available", details: "", contact_email: "" });
+  const [reportStatus, setReportStatus] = useState("");
+  const [reportBusy, setReportBusy] = useState(false);
   const { isFavorite, toggleFavorite } = useFavorites();
 
   useEffect(() => {
@@ -32,12 +37,37 @@ export default function ListingDetail() {
   const price = listing.price_weekly ? `$${listing.price_weekly}/week` : listing.price_monthly ? `$${listing.price_monthly}/month` : "Inquire";
   const monthly = listing.price_monthly ? ` · $${listing.price_monthly}/mo` : "";
   const saved = isFavorite(listing.listing_id);
+  const trustBadges = listingTrustBadges(listing);
   const ruleRows = [
     listing.drug_testing && ["Drug testing", listing.drug_testing],
     listing.curfew && ["Curfew", listing.curfew],
     listing.meeting_requirements && ["Meetings", listing.meeting_requirements],
     listing.smoking_policy && ["Smoking", listing.smoking_policy],
   ].filter(Boolean);
+
+  const submitReport = async (e) => {
+    e.preventDefault();
+    setReportBusy(true);
+    setReportStatus("");
+    try {
+      await api.post(`/listings/${listing.listing_id}/report`, {
+        reason: report.reason,
+        details: report.details,
+        contact_email: report.contact_email || null,
+      });
+      setReportStatus("Thanks. This report was sent privately to SoberBoard.");
+      setReport({ reason: "No beds actually available", details: "", contact_email: "" });
+    } catch {
+      if (shouldUseDemoFallback) {
+        setReportStatus("Demo mode: this report would be sent privately to SoberBoard.");
+        setReport({ reason: "No beds actually available", details: "", contact_email: "" });
+      } else {
+        setReportStatus("Could not send the report right now. Please try again later.");
+      }
+    } finally {
+      setReportBusy(false);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-10" data-testid="listing-detail-page">
@@ -80,6 +110,19 @@ export default function ListingDetail() {
             <Stat label="Parking" value={listing.parking}/>
             <Stat label="Pets" value={listing.pets_allowed ? "Yes" : "No"}/>
           </div>
+
+          {trustBadges.length > 0 && (
+            <div className="mt-8 rounded-2xl border border-[#EAE5D9] bg-white p-5" data-testid="listing-trust-badges">
+              <p className="sb-overline">Listing signals</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {trustBadges.map(badge => (
+                  <span key={badge.label} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm ${badge.tone === "strong" ? "bg-[#E9F2EA] text-[#426245]" : "bg-[#F3EFE7] text-[#5C6670]"}`}>
+                    <CheckCircle2 size={14} strokeWidth={1.7}/> {badge.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {(listing.accepts_insurance || listing.insurance_notes) && (
             <div className="mt-8 rounded-2xl border border-[#EAE5D9] bg-white p-5 flex gap-3" data-testid="listing-insurance">
@@ -150,8 +193,59 @@ export default function ListingDetail() {
               <Phone size={16}/> {listing.manager_phone}
             </a>
             <p className="mt-3 text-xs text-[#8A94A0] leading-relaxed text-center">
-              SoberBoard does not screen residents or operators. Always verify in person before paying any deposit.
+              SoberBoard is a directory, not a placement service. We do not screen homes, place residents, mediate disputes, or guarantee outcomes after move-in.
             </p>
+
+            <button
+              type="button"
+              onClick={() => setReportOpen(!reportOpen)}
+              className="mt-4 w-full inline-flex items-center justify-center gap-2 text-sm text-[#5C6670] hover:text-[#C26D53]"
+              data-testid="report-listing-toggle"
+            >
+              <Flag size={14}/> Report listing issue
+            </button>
+
+            {reportOpen && (
+              <form onSubmit={submitReport} className="mt-4 rounded-2xl border border-[#EAE5D9] bg-[#F3EFE7] p-4" data-testid="report-listing-form">
+                <p className="font-serif text-lg text-[#2D3339]">Private listing report</p>
+                <p className="mt-1 text-xs text-[#5C6670] leading-relaxed">
+                  Use this for stale, incorrect, or suspicious listings. This is not a public review.
+                </p>
+                <select
+                  className="sb-input mt-3 text-sm"
+                  value={report.reason}
+                  onChange={(e) => setReport(r => ({ ...r, reason: e.target.value }))}
+                  data-testid="report-reason"
+                >
+                  <option>No beds actually available</option>
+                  <option>Phone number does not work</option>
+                  <option>Price or payment info is wrong</option>
+                  <option>Listing asks for exact address too early</option>
+                  <option>Listing appears fake or suspicious</option>
+                  <option>Other listing accuracy issue</option>
+                </select>
+                <textarea
+                  className="sb-input mt-3 text-sm"
+                  rows={3}
+                  placeholder="Optional details"
+                  value={report.details}
+                  onChange={(e) => setReport(r => ({ ...r, details: e.target.value }))}
+                  data-testid="report-details"
+                />
+                <input
+                  className="sb-input mt-3 text-sm"
+                  type="email"
+                  placeholder="Optional email if we need to follow up"
+                  value={report.contact_email}
+                  onChange={(e) => setReport(r => ({ ...r, contact_email: e.target.value }))}
+                  data-testid="report-email"
+                />
+                {reportStatus && <p className="mt-3 text-xs text-[#5C6670]" data-testid="report-status">{reportStatus}</p>}
+                <button type="submit" disabled={reportBusy} className="mt-3 sb-btn-primary w-full text-sm" data-testid="report-submit">
+                  {reportBusy ? "Sending..." : "Send private report"}
+                </button>
+              </form>
+            )}
 
             <div className="sb-divider my-5"/>
             <p className="sb-overline">Meetings nearby</p>

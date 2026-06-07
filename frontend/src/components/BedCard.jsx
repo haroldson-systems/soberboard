@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Heart, MapPin, Bed, Users, PawPrint, Waves, Car, ShieldCheck } from "lucide-react";
 import { publicUrl } from "@/components/ImageUploader";
 import { useFavorites } from "@/lib/favorites";
+import { listingTrustBadges } from "@/lib/listingTrust";
 
 export default function BedCard({ listing, index = 0 }) {
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -17,6 +18,7 @@ export default function BedCard({ listing, index = 0 }) {
   const cover = (listing.image_urls && listing.image_urls.length > 0)
     ? publicUrl(listing.image_urls[0])
     : (listing.image_url || fallback);
+  const trustBadges = listingTrustBadges(listing).slice(0, 2);
 
   return (
     <article
@@ -58,8 +60,17 @@ export default function BedCard({ listing, index = 0 }) {
           <p className="mt-1.5 flex items-center gap-1.5 text-sm text-[#5C6670]">
           <MapPin size={14} strokeWidth={1.6}/> {listing.city}{listing.state ? `, ${listing.state}` : ""} · {listing.zip_code}
           </p>
-          {listing.region && <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[#8A94A0]">{listing.region}</p>}
+        {listing.region && <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[#8A94A0]">{listing.region}</p>}
         </Link>
+        {trustBadges.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {trustBadges.map(badge => (
+              <span key={badge.label} className={`text-[0.7rem] rounded-full px-2.5 py-1 ${badge.tone === "strong" ? "bg-[#E9F2EA] text-[#426245]" : "bg-[#F3EFE7] text-[#5C6670]"}`}>
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="mt-4 flex flex-wrap gap-1.5">
           <span className="sb-chip"><Users size={12} strokeWidth={1.6}/> {listing.people_per_room} per room</span>
           <span className="sb-chip"><Bed size={12} strokeWidth={1.6}/> {listing.gender}</span>

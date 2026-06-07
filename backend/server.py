@@ -165,6 +165,12 @@ class ListingOut(ListingIn):
     image_url: Optional[str] = None
 
 
+class ListingReportIn(BaseModel):
+    reason: str
+    details: str = ""
+    contact_email: Optional[EmailStr] = None
+
+
 # ============== CLOUDINARY IMAGE STORAGE ==============
 MIME_TYPES = {
     "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
@@ -471,6 +477,30 @@ async def get_listing(listing_id: str):
     if not item:
         raise HTTPException(status_code=404, detail="Listing not found")
     return item
+
+
+@api_router.post("/listings/{listing_id}/report")
+async def report_listing(listing_id: str, body: ListingReportIn, request: Request):
+    item = await db.listings.find_one({"listing_id": listing_id}, {"_id": 0, "listing_id": 1, "house_name": 1, "manager_phone": 1})
+    if not item:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    reason = body.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Report reason is required")
+    report_id = f"rpt_{uuid.uuid4().hex[:12]}"
+    await db.listing_reports.insert_one({
+        "report_id": report_id,
+        "listing_id": listing_id,
+        "house_name": item.get("house_name"),
+        "reason": reason,
+        "details": body.details.strip(),
+        "contact_email": str(body.contact_email).lower() if body.contact_email else None,
+        "status": "new",
+        "ip": request.client.host if request.client else "unknown",
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    })
+    return {"ok": True, "report_id": report_id}
 
 
 @api_router.post("/listings")
@@ -803,6 +833,9 @@ async def on_startup():
     await db.listings.create_index("city")
     await db.listings.create_index("zip_code")
     await db.listings.create_index("status")
+    await db.listing_reports.create_index("listing_id")
+    await db.listing_reports.create_index("status")
+    await db.listing_reports.create_index("created_at")
     await db.login_attempts.create_index("identifier")
 
     # Admin seeding
