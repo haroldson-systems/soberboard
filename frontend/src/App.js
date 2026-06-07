@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import ScrollToTop from "@/components/ScrollToTop";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import EmergencyBanner from "@/components/EmergencyBanner";
 
 import Landing from "@/pages/Landing";
 import BedsDirectory from "@/pages/BedsDirectory";
@@ -19,12 +20,15 @@ import JobsBoard from "@/pages/JobsBoard";
 import Services from "@/pages/Services";
 import Meetings from "@/pages/Meetings";
 import About from "@/pages/About";
+import NewRecoveryGuide from "@/pages/NewRecoveryGuide";
+import Compare from "@/pages/Compare";
 
 function AppRouter() {
   return (
     <>
       <ScrollToTop />
       <Header />
+      <EmergencyBanner />
       <main className="App">
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -38,6 +42,8 @@ function AppRouter() {
           <Route path="/jobs" element={<JobsBoard />} />
           <Route path="/services" element={<Services />} />
           <Route path="/meetings" element={<Meetings />} />
+          <Route path="/new-to-recovery" element={<NewRecoveryGuide />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/about" element={<About />} />
           <Route path="*" element={<Landing />} />
         </Routes>

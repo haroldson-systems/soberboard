@@ -12,6 +12,16 @@ const AMENITY_OPTIONS = [
   "On-site house manager", "BBQ / outdoor space",
 ];
 
+const HOUSE_RULE_OPTIONS = [
+  "Drug testing required",
+  "Curfew enforced",
+  "Meeting attendance required",
+  "Sponsor required",
+  "Working or in outpatient",
+  "Overnight passes by approval",
+  "No visitors without approval",
+];
+
 export default function PostListing() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -24,15 +34,23 @@ export default function PostListing() {
     beds_open: 1,
     price_weekly: "",
     price_monthly: "",
+    accepts_insurance: false,
+    insurance_notes: "",
     people_per_room: 2,
     gender: "men",
     pets_allowed: false,
     pool: false,
     parking: "driveway",
     amenities: [],
+    drug_testing: "",
+    curfew: "",
+    meeting_requirements: "",
+    smoking_policy: "",
+    house_rules: [],
     description: "",
     manager_name: user?.name || "",
     manager_phone: user?.phone || "",
+    image_urls: [],
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -61,6 +79,7 @@ export default function PostListing() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleAmenity = (a) => set("amenities", form.amenities.includes(a) ? form.amenities.filter(x => x !== a) : [...form.amenities, a]);
+  const toggleRule = (a) => set("house_rules", form.house_rules.includes(a) ? form.house_rules.filter(x => x !== a) : [...form.house_rules, a]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -155,6 +174,25 @@ export default function PostListing() {
           <Field label="$ / month"><input type="number" placeholder="e.g. 700" className="sb-input" value={form.price_monthly} onChange={(e) => set("price_monthly", e.target.value)} data-testid="post-price-monthly"/></Field>
         </div>
 
+        <div className="rounded-2xl border border-[#EAE5D9] bg-white p-5">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div>
+              <p className="sb-overline">Payment</p>
+              <p className="mt-1 text-sm text-[#5C6670]">Let residents know if insurance may help cover costs.</p>
+            </div>
+            <label className="inline-flex items-center gap-2 cursor-pointer text-sm font-semibold text-[#2D3339]" data-testid="post-insurance-toggle">
+              <input type="checkbox" checked={form.accepts_insurance} onChange={(e) => set("accepts_insurance", e.target.checked)}/> Accepts insurance
+            </label>
+          </div>
+          {form.accepts_insurance && (
+            <div className="mt-4">
+              <Field label="Insurance notes" hint="Example: PPO only, verification required, or call manager to check benefits.">
+                <input className="sb-input" value={form.insurance_notes} onChange={(e) => set("insurance_notes", e.target.value)} data-testid="post-insurance-notes"/>
+              </Field>
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <Field label="Gender / housing">
             <select className="sb-input" value={form.gender} onChange={(e) => set("gender", e.target.value)} data-testid="post-gender">
@@ -196,6 +234,28 @@ export default function PostListing() {
             })}
           </div>
         </Field>
+
+        <div className="rounded-2xl border border-[#EAE5D9] bg-[#F3EFE7] p-5">
+          <p className="sb-overline">House rules</p>
+          <p className="mt-1 text-sm text-[#5C6670]">Clear rules help residents make the right call before they call you.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {HOUSE_RULE_OPTIONS.map(a => {
+              const on = form.house_rules.includes(a);
+              return (
+                <button type="button" key={a} onClick={() => toggleRule(a)} className={`px-3 py-1.5 rounded-full text-sm border transition ${on ? "bg-[#2B4C5F] text-white border-[#2B4C5F]" : "bg-white border-[#EAE5D9] hover:border-[#2B4C5F] text-[#5C6670]"}`} data-testid={`rule-toggle-${a.replace(/\W+/g,'-')}`}>
+                  {on && <CheckCircle2 size={12} className="inline mr-1"/>}{a}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <Field label="Drug testing"><input className="sb-input" placeholder="e.g. Random UA, 2x/week" value={form.drug_testing} onChange={(e) => set("drug_testing", e.target.value)} data-testid="post-drug-testing"/></Field>
+            <Field label="Curfew"><input className="sb-input" placeholder="e.g. 10 PM weekdays, midnight weekends" value={form.curfew} onChange={(e) => set("curfew", e.target.value)} data-testid="post-curfew"/></Field>
+            <Field label="Meeting requirements"><input className="sb-input" placeholder="e.g. 5 meetings/week, sponsor required" value={form.meeting_requirements} onChange={(e) => set("meeting_requirements", e.target.value)} data-testid="post-meeting-requirements"/></Field>
+            <Field label="Smoking policy"><input className="sb-input" placeholder="e.g. Outside only, no vaping inside" value={form.smoking_policy} onChange={(e) => set("smoking_policy", e.target.value)} data-testid="post-smoking-policy"/></Field>
+          </div>
+        </div>
 
         <Field label="Description" hint="A few sentences about the house, vibe, requirements.">
           <textarea required rows={5} className="sb-input" value={form.description} onChange={(e) => set("description", e.target.value)} data-testid="post-description"/>

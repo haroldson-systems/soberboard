@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, SlidersHorizontal, MapPin } from "lucide-react";
+import { Grid2X2, Search, SlidersHorizontal, MapPin } from "lucide-react";
 import api from "@/lib/api";
 import BedCard from "@/components/BedCard";
 import SponsoredAds from "@/components/SponsoredAds";
 import DemoBanner from "@/components/DemoBanner";
+import ListingMap from "@/components/ListingMap";
 import { demoRegions, getDemoListings, shouldUseDemoFallback } from "@/lib/demoData";
 
 export default function BedsDirectory() {
@@ -19,7 +20,9 @@ export default function BedsDirectory() {
   const region = params.get("region") || "";
   const gender = params.get("gender") || "";
   const pets = params.get("pets") === "true";
+  const insurance = params.get("insurance") === "true";
   const maxPrice = params.get("max_price") || "";
+  const view = params.get("view") === "map" ? "map" : "list";
 
   useEffect(() => {
     api.get("/regions").then(r => setRegions(r.data)).catch(() => {
@@ -36,12 +39,13 @@ export default function BedsDirectory() {
     if (region) search.set("region", region);
     if (gender) search.set("gender", gender);
     if (pets) search.set("pets", "true");
+    if (insurance) search.set("insurance", "true");
     if (maxPrice) search.set("max_price", maxPrice);
     api.get(`/listings?${search.toString()}`)
       .then(r => setAll(r.data))
-      .catch(() => setAll(shouldUseDemoFallback ? getDemoListings({ q, city, state, region, gender, pets, maxPrice }) : []))
+      .catch(() => setAll(shouldUseDemoFallback ? getDemoListings({ q, city, state, region, gender, pets, insurance, maxPrice }) : []))
       .finally(() => setLoading(false));
-  }, [q, city, state, region, gender, pets, maxPrice]);
+  }, [q, city, state, region, gender, pets, insurance, maxPrice]);
 
   const cities = useMemo(() => {
     const s = new Set(all.map(l => l.city));
@@ -81,6 +85,24 @@ export default function BedsDirectory() {
             Every listing is from a real house manager. Call directly, no middleman.
           </p>
         </div>
+        <div className="md:col-span-5 md:self-end md:justify-self-end">
+          <div className="inline-flex rounded-full border border-[#EAE5D9] bg-white p-1" data-testid="beds-view-toggle">
+            <button
+              type="button"
+              onClick={() => setParam("view", "list")}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${view === "list" ? "bg-[#2B4C5F] text-white" : "text-[#5C6670] hover:text-[#2D3339]"}`}
+            >
+              <Grid2X2 size={14}/> List
+            </button>
+            <button
+              type="button"
+              onClick={() => setParam("view", "map")}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${view === "map" ? "bg-[#2B4C5F] text-white" : "text-[#5C6670] hover:text-[#2D3339]"}`}
+            >
+              <MapPin size={14}/> Map
+            </button>
+          </div>
+        </div>
       </div>
 
       <DemoBanner className="mb-6" />
@@ -113,7 +135,7 @@ export default function BedsDirectory() {
       )}
 
       <div className="bg-white border border-[#EAE5D9] rounded-2xl p-4 md:p-5 mb-10 grid grid-cols-1 md:grid-cols-12 gap-3" data-testid="beds-filter-bar">
-        <div className="md:col-span-4 flex items-center gap-2 sb-input">
+        <div className="md:col-span-3 flex items-center gap-2 sb-input">
           <Search size={16} className="text-[#8A94A0]"/>
           <input
             value={q}
@@ -123,7 +145,7 @@ export default function BedsDirectory() {
             data-testid="beds-search-input"
           />
         </div>
-        <select className="sb-input md:col-span-3" value={city} onChange={(e) => setParam("city", e.target.value)} data-testid="beds-city-filter">
+        <select className="sb-input md:col-span-2" value={city} onChange={(e) => setParam("city", e.target.value)} data-testid="beds-city-filter">
           {cities.map(c => <option key={c} value={c === "All cities" ? "" : c}>{c}</option>)}
         </select>
         <select className="sb-input md:col-span-2" value={gender || "any"} onChange={(e) => setParam("gender", e.target.value)} data-testid="beds-gender-filter">
@@ -142,6 +164,9 @@ export default function BedsDirectory() {
         <label className="md:col-span-1 flex items-center gap-2 px-2 cursor-pointer text-sm text-[#2D3339]">
           <input type="checkbox" checked={pets} onChange={(e) => setParam("pets", e.target.checked ? "true" : "")} data-testid="beds-pets-filter"/> Pets
         </label>
+        <label className="md:col-span-2 flex items-center gap-2 px-2 cursor-pointer text-sm text-[#2D3339]">
+          <input type="checkbox" checked={insurance} onChange={(e) => setParam("insurance", e.target.checked ? "true" : "")} data-testid="beds-insurance-filter"/> Insurance
+        </label>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -155,12 +180,16 @@ export default function BedsDirectory() {
               <p className="text-[#5C6670] mt-1">Try widening your search.</p>
             </div>
           ) : (
-            <>
-              <p className="text-[#5C6670] text-sm mb-4" data-testid="beds-result-count">{all.length} {all.length === 1 ? "listing" : "listings"} available</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                {all.map((l, i) => <BedCard key={l.listing_id} listing={l} index={i}/>)}
-              </div>
-            </>
+            view === "map" ? (
+              <ListingMap listings={all}/>
+            ) : (
+              <>
+                <p className="text-[#5C6670] text-sm mb-4" data-testid="beds-result-count">{all.length} {all.length === 1 ? "listing" : "listings"} available</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {all.map((l, i) => <BedCard key={l.listing_id} listing={l} index={i}/>)}
+                </div>
+              </>
+            )
           )}
         </div>
         <div className="lg:col-span-3">

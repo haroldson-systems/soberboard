@@ -136,12 +136,19 @@ class ListingIn(BaseModel):
     beds_open: int = Field(ge=1, le=50)
     price_weekly: Optional[float] = None
     price_monthly: Optional[float] = None
+    accepts_insurance: bool = False
+    insurance_notes: str = ""
     people_per_room: int = Field(ge=1, le=8, default=2)
     gender: str = "any"  # men, women, couples, any, coed
     pets_allowed: bool = False
     pool: bool = False
     parking: str = "street"  # street, driveway, garage, none
     amenities: List[str] = []
+    drug_testing: str = ""
+    curfew: str = ""
+    meeting_requirements: str = ""
+    smoking_policy: str = ""
+    house_rules: List[str] = []
     description: str = ""
     manager_name: str
     manager_phone: str
@@ -397,6 +404,7 @@ async def list_listings(
     zip_code: Optional[str] = None,
     gender: Optional[str] = None,
     pets: Optional[bool] = None,
+    insurance: Optional[bool] = None,
     max_price: Optional[float] = None,
     q: Optional[str] = None,
 ):
@@ -414,6 +422,8 @@ async def list_listings(
         and_clauses.append({"gender": {"$in": [gender, "any", "coed"]}})
     if pets is True:
         and_clauses.append({"pets_allowed": True})
+    if insurance is True:
+        and_clauses.append({"accepts_insurance": True})
     if max_price is not None:
         and_clauses.append({"$or": [
             {"price_weekly": {"$lte": max_price}},
@@ -425,6 +435,8 @@ async def list_listings(
             {"city": {"$regex": q, "$options": "i"}},
             {"region": {"$regex": q, "$options": "i"}},
             {"description": {"$regex": q, "$options": "i"}},
+            {"insurance_notes": {"$regex": q, "$options": "i"}},
+            {"meeting_requirements": {"$regex": q, "$options": "i"}},
             {"zip_code": {"$regex": f"^{q}", "$options": "i"}},
         ]})
     query = {"$and": and_clauses} if len(and_clauses) > 1 else and_clauses[0]
@@ -692,6 +704,17 @@ def infer_region(city: str, zip_code: str) -> tuple:
     return CITY_TO_REGION.get((city or "").strip().lower(), ("CA", "Other"))
 
 
+LISTING_FIELD_DEFAULTS = {
+    "accepts_insurance": False,
+    "insurance_notes": "",
+    "drug_testing": "",
+    "curfew": "",
+    "meeting_requirements": "",
+    "smoking_policy": "",
+    "house_rules": [],
+}
+
+
 SEED_LISTINGS = [
     {"house_name": "Garden Grove Sober House", "city": "Garden Grove", "zip_code": "92840", "beds_open": 2, "price_weekly": 175, "price_monthly": 700, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": True, "parking": "driveway", "amenities": ["Pool in backyard", "Plenty of parking", "Cable & WiFi", "Weekly house meetings"], "description": "Quiet 6-bed home in Garden Grove. Walking distance to AA meetings. House manager lives on-site.", "manager_name": "Marcus Reyes", "manager_phone": "(714) 555-0142", "image_url": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=900"},
     {"house_name": "Costa Mesa Recovery Residence", "city": "Costa Mesa", "zip_code": "92626", "beds_open": 1, "price_weekly": 200, "price_monthly": 800, "people_per_room": 2, "gender": "men", "pets_allowed": False, "pool": False, "parking": "street", "amenities": ["Cable & WiFi", "Bike storage", "Bus line nearby"], "description": "3-man room available. Drug-tested house, structured environment, 12-step required.", "manager_name": "David Kim", "manager_phone": "(949) 555-0188", "image_url": "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900"},
@@ -826,6 +849,7 @@ async def on_startup():
             state, region = infer_region(s["city"], s["zip_code"])
             doc = {
                 **s,
+                **LISTING_FIELD_DEFAULTS,
                 "state": s.get("state", state),
                 "region": s.get("region", region),
                 "listing_id": f"lst_{uuid.uuid4().hex[:12]}",
@@ -849,6 +873,7 @@ async def on_startup():
             state, region = infer_region(s["city"], s["zip_code"])
             await db.listings.insert_one({
                 **s,
+                **LISTING_FIELD_DEFAULTS,
                 "state": s.get("state", state),
                 "region": s.get("region", region),
                 "listing_id": f"lst_{uuid.uuid4().hex[:12]}",
@@ -865,6 +890,9 @@ async def on_startup():
         {"user_id": "user_demo00manager"},
         {"$set": {"status": "active", "expires_at": demo_expiry_iso, "updated_at": _now_iso()}},
     )
+
+    for field, default in LISTING_FIELD_DEFAULTS.items():
+        await db.listings.update_many({field: {"$exists": False}}, {"$set": {field: default}})
 
     # Seed jobs
     if await db.jobs.count_documents({}) == 0:
