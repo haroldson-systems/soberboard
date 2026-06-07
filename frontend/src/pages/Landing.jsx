@@ -80,8 +80,28 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* FEATURED BEDS */}
+      <section className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-14 lg:py-20">
+        <div className="flex items-end justify-between gap-6 mb-10">
+          <div>
+            <p className="sb-overline">Open right now</p>
+            <h2 className="mt-2 font-serif text-3xl lg:text-4xl text-[#2D3339]">Open beds across California & beyond</h2>
+          </div>
+          <Link to="/beds" className="hidden sm:inline-flex items-center gap-2 text-[#C26D53] font-semibold hover:gap-3 transition-all" data-testid="featured-see-all">
+            See all listings <ArrowRight size={16}/>
+          </Link>
+        </div>
+        <DemoBanner className="mb-6" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {featured.map((l, i) => <BedCard key={l.listing_id} listing={l} index={i}/>)}
+        </div>
+        <div className="mt-10 sm:hidden">
+          <Link to="/beds" className="sb-btn-outline inline-flex items-center gap-2">See all listings <ArrowRight size={16}/></Link>
+        </div>
+      </section>
+
       {/* HOW IT WORKS */}
-      <section className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-20 lg:py-28">
+      <section className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-16 lg:py-24">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 items-end">
           <div className="md:col-span-5">
             <p className="sb-overline">How it works</p>
@@ -108,26 +128,6 @@ export default function Landing() {
               <p className="mt-3 text-[#5C6670] leading-relaxed">{s.d}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* FEATURED BEDS */}
-      <section className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-10 lg:py-16">
-        <div className="flex items-end justify-between gap-6 mb-10">
-          <div>
-            <p className="sb-overline">Open right now</p>
-            <h2 className="mt-2 font-serif text-3xl lg:text-4xl text-[#2D3339]">Open beds across California & beyond</h2>
-          </div>
-          <Link to="/beds" className="hidden sm:inline-flex items-center gap-2 text-[#C26D53] font-semibold hover:gap-3 transition-all" data-testid="featured-see-all">
-            See all listings <ArrowRight size={16}/>
-          </Link>
-        </div>
-        <DemoBanner className="mb-6" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featured.map((l, i) => <BedCard key={l.listing_id} listing={l} index={i}/>)}
-        </div>
-        <div className="mt-10 sm:hidden">
-          <Link to="/beds" className="sb-btn-outline inline-flex items-center gap-2">See all listings <ArrowRight size={16}/></Link>
         </div>
       </section>
 
