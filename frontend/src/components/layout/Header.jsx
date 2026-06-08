@@ -25,18 +25,18 @@ export default function Header() {
 
   return (
     <header className="sb-glass sticky top-0 z-50" data-testid="site-header">
-      <div className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 h-[72px] flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2.5" data-testid="logo-home-link">
+      <div className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 h-[72px] flex items-center justify-between gap-5">
+        <Link to="/" className="flex items-center gap-2.5 shrink-0" data-testid="logo-home-link">
           <div className="h-9 w-9 rounded-xl bg-[#C26D53] grid place-items-center text-white font-serif text-lg leading-none">sb</div>
           <span className="font-serif text-[1.35rem] tracking-tight text-[#2D3339]">SoberBoard</span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-7">
+        <nav className="hidden xl:flex items-center gap-6">
           {links.map(l => (
             <NavLink
               key={l.to}
               to={l.to}
-              className={({isActive}) => `text-[0.95rem] font-medium transition-colors ${isActive ? "text-[#C26D53]" : "text-[#2D3339] hover:text-[#C26D53]"}`}
+              className={({isActive}) => `text-[0.95rem] font-medium whitespace-nowrap transition-colors ${isActive ? "text-[#C26D53]" : "text-[#2D3339] hover:text-[#C26D53]"}`}
               data-testid={`nav-${l.label.toLowerCase()}-link`}
             >
               {l.label}
@@ -44,13 +44,13 @@ export default function Header() {
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden xl:flex items-center gap-3 shrink-0">
           {user ? (
             <>
-              <Link to="/dashboard" className="sb-btn-outline inline-flex items-center gap-2" data-testid="header-dashboard-btn">
+              <Link to="/dashboard" className="sb-btn-outline inline-flex items-center gap-2 whitespace-nowrap" data-testid="header-dashboard-btn">
                 <LayoutDashboard size={16} strokeWidth={1.6}/> Dashboard
               </Link>
-              <Link to="/post" className="sb-btn-primary inline-flex items-center gap-2" data-testid="header-post-listing-btn">
+              <Link to="/post" className="sb-btn-primary inline-flex items-center gap-2 whitespace-nowrap" data-testid="header-post-listing-btn">
                 <Plus size={16} strokeWidth={2}/> Post a bed
               </Link>
               <button onClick={onLogout} className="text-[#5C6670] hover:text-[#C26D53] p-2" data-testid="header-logout-btn" aria-label="Logout">
@@ -59,21 +59,21 @@ export default function Header() {
             </>
           ) : (
             <>
-              <Link to="/login" className="text-[#2D3339] hover:text-[#C26D53] font-medium" data-testid="header-login-link">Sign in</Link>
-              <Link to="/post" className="sb-btn-primary inline-flex items-center gap-2" data-testid="header-post-listing-btn">
+              <Link to="/login" className="text-[#2D3339] hover:text-[#C26D53] font-medium whitespace-nowrap" data-testid="header-login-link">Sign in</Link>
+              <Link to="/post" className="sb-btn-primary inline-flex items-center gap-2 whitespace-nowrap" data-testid="header-post-listing-btn">
                 <Plus size={16} strokeWidth={2}/> Post a bed
               </Link>
             </>
           )}
         </div>
 
-        <button className="md:hidden p-2 text-[#2D3339]" onClick={() => setOpen(!open)} data-testid="mobile-menu-toggle" aria-label="Menu">
+        <button className="xl:hidden p-2 text-[#2D3339]" onClick={() => setOpen(!open)} data-testid="mobile-menu-toggle" aria-label="Menu">
           {open ? <X size={22}/> : <Menu size={22}/>}
         </button>
       </div>
 
       {open && (
-        <div className="md:hidden border-t border-[#EAE5D9] bg-[#FDFBF7]" data-testid="mobile-menu">
+        <div className="xl:hidden border-t border-[#EAE5D9] bg-[#FDFBF7]" data-testid="mobile-menu">
           <div className="px-5 py-4 flex flex-col gap-3">
             {links.map(l => (
               <NavLink key={l.to} to={l.to} onClick={() => setOpen(false)} className="py-1.5 text-[#2D3339]" data-testid={`mobile-nav-${l.label.toLowerCase()}`}>{l.label}</NavLink>
