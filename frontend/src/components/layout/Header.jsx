@@ -20,6 +20,7 @@ export default function Header() {
   const isBusiness = user?.role === "business" || user?.role === "admin";
   const dashboardLink = isBusiness ? "/business" : "/dashboard";
   const dashboardLabel = isBusiness ? "Business" : "Dashboard";
+  const businessLink = user ? dashboardLink : "/register?role=business";
 
   const onLogout = async () => {
     await logout();
@@ -65,6 +66,7 @@ export default function Header() {
           ) : (
             <>
               <Link to="/login" className="text-[#2D3339] hover:text-[#C26D53] font-medium whitespace-nowrap" data-testid="header-login-link">Sign in</Link>
+              <Link to={businessLink} className="text-[#2D3339] hover:text-[#C26D53] font-medium whitespace-nowrap" data-testid="header-business-link">Business</Link>
               <Link to="/post" className="sb-btn-primary inline-flex items-center gap-2 whitespace-nowrap" data-testid="header-post-listing-btn">
                 <Plus size={16} strokeWidth={2}/> Post a bed
               </Link>
@@ -93,6 +95,7 @@ export default function Header() {
             ) : (
               <>
                 <Link to="/login" onClick={() => setOpen(false)} className="py-1.5">Sign in</Link>
+                <Link to={businessLink} onClick={() => setOpen(false)} className="py-1.5">Business</Link>
                 <Link to="/post" onClick={() => setOpen(false)} className="py-1.5 text-[#C26D53] font-semibold">Post a bed</Link>
               </>
             )}
