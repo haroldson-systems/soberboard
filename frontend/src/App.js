@@ -22,6 +22,7 @@ import Meetings from "@/pages/Meetings";
 import About from "@/pages/About";
 import NewRecoveryGuide from "@/pages/NewRecoveryGuide";
 import Compare from "@/pages/Compare";
+import BusinessPortal from "@/pages/BusinessPortal";
 
 function AppRouter() {
   return (
@@ -38,6 +39,7 @@ function AppRouter() {
           <Route path="/register" element={<Register />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/business" element={<BusinessPortal />} />
           <Route path="/post" element={<PostListing />} />
           <Route path="/jobs" element={<JobsBoard />} />
           <Route path="/services" element={<Services />} />

@@ -113,6 +113,7 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str
     name: str
+    role: str = "manager"
 
 
 class LoginIn(BaseModel):
@@ -180,6 +181,48 @@ class SavedSearchIn(BaseModel):
     alerts_enabled: bool = True
 
 
+class BusinessJobIn(BaseModel):
+    title: str
+    company: str
+    city: str
+    pay: str = ""
+    type: str = "Full-time"
+    schedule: str = ""
+    recovery_notes: str = ""
+    description: str = ""
+    contact: EmailStr
+
+
+class BusinessServiceIn(BaseModel):
+    name: str
+    category: str
+    city: str
+    region: str = ""
+    phone: str
+    url: str = ""
+    description: str
+    tags: List[str] = Field(default_factory=list)
+
+
+class BusinessAdIn(BaseModel):
+    slot: str = "sidebar"
+    category: str = "Treatment"
+    title: str
+    subtitle: str = ""
+    cta: str = ""
+    url: str = ""
+    image_url: str = ""
+    target_region: str = ""
+    target_category: str = ""
+    budget: str = ""
+    duration: str = ""
+
+
+class BusinessSubmissionStatusIn(BaseModel):
+    status: str
+    note: str = ""
+
+
 # ============== CLOUDINARY IMAGE STORAGE ==============
 MIME_TYPES = {
     "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
@@ -232,13 +275,14 @@ async def register(body: RegisterIn, response: Response):
     existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+    role = body.role if body.role in {"manager", "business"} else "manager"
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     user_doc = {
         "user_id": user_id,
         "email": email,
         "name": body.name.strip(),
         "password_hash": hash_password(body.password),
-        "role": "manager",
+        "role": role,
         "auth_provider": "password",
         "picture": None,
         "phone": None,
@@ -906,35 +950,230 @@ async def notification_loop():
 
 
 # ============== JOBS ==============
+def require_business(user: dict):
+    if user.get("role") not in {"business", "admin"}:
+        raise HTTPException(status_code=403, detail="Business account required")
+
+
+def require_admin(user: dict):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin account required")
+
+
+def clean_tags(tags: List[str]) -> List[str]:
+    return [str(tag).strip()[:40] for tag in tags if str(tag).strip()][:8]
+
+
+def business_collection(submission_type: str):
+    if submission_type == "jobs":
+        return db.jobs, "job_id"
+    if submission_type == "services":
+        return db.services, "service_id"
+    if submission_type == "ads":
+        return db.ads, "ad_id"
+    raise HTTPException(status_code=400, detail="Unsupported submission type")
+
+
 @api_router.get("/jobs")
 async def list_jobs(city: Optional[str] = None, q: Optional[str] = None):
-    query = {}
+    query = {"$or": [{"status": {"$exists": False}}, {"status": {"$in": ["approved", "active"]}}]}
     if city:
-        query["city"] = {"$regex": city, "$options": "i"}
+        query = {"$and": [query, {"city": {"$regex": city, "$options": "i"}}]}
     if q:
-        query["$or"] = [
+        search_query = {"$or": [
             {"title": {"$regex": q, "$options": "i"}},
             {"company": {"$regex": q, "$options": "i"}},
-        ]
+        ]}
+        query = {"$and": [query, search_query]}
     return await db.jobs.find(query, {"_id": 0}).sort("posted_at", -1).to_list(200)
+
+
+@api_router.get("/business/jobs")
+async def business_jobs(user: dict = Depends(get_current_user)):
+    require_business(user)
+    return await db.jobs.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+
+@api_router.post("/business/jobs")
+async def create_business_job(body: BusinessJobIn, user: dict = Depends(get_current_user)):
+    require_business(user)
+    now = _now_iso()
+    doc = body.model_dump()
+    doc.update({
+        "job_id": f"job_{uuid.uuid4().hex[:10]}",
+        "user_id": user["user_id"],
+        "status": "pending_review",
+        "tags": clean_tags(["Recovery friendly", body.schedule, body.recovery_notes]),
+        "posted_at": now[:10],
+        "created_at": now,
+        "updated_at": now,
+    })
+    await db.jobs.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/business/jobs/{job_id}")
+async def update_business_job(job_id: str, body: BusinessJobIn, user: dict = Depends(get_current_user)):
+    require_business(user)
+    item = await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if item.get("user_id") != user["user_id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    update = body.model_dump()
+    update.update({
+        "status": "pending_review",
+        "tags": clean_tags(["Recovery friendly", body.schedule, body.recovery_notes]),
+        "updated_at": _now_iso(),
+    })
+    await db.jobs.update_one({"job_id": job_id}, {"$set": update})
+    return await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
 
 
 # ============== SERVICES ==============
 @api_router.get("/services")
 async def list_services(category: Optional[str] = None):
-    query = {}
+    query = {"$or": [{"status": {"$exists": False}}, {"status": {"$in": ["approved", "active"]}}]}
     if category and category != "all":
-        query["category"] = category
+        query = {"$and": [query, {"category": category}]}
     return await db.services.find(query, {"_id": 0}).to_list(200)
+
+
+@api_router.get("/business/services")
+async def business_services(user: dict = Depends(get_current_user)):
+    require_business(user)
+    return await db.services.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+
+@api_router.post("/business/services")
+async def create_business_service(body: BusinessServiceIn, user: dict = Depends(get_current_user)):
+    require_business(user)
+    now = _now_iso()
+    doc = body.model_dump()
+    doc.update({
+        "service_id": f"svc_{uuid.uuid4().hex[:10]}",
+        "user_id": user["user_id"],
+        "status": "pending_review",
+        "tags": clean_tags(body.tags),
+        "created_at": now,
+        "updated_at": now,
+    })
+    await db.services.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/business/services/{service_id}")
+async def update_business_service(service_id: str, body: BusinessServiceIn, user: dict = Depends(get_current_user)):
+    require_business(user)
+    item = await db.services.find_one({"service_id": service_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Service not found")
+    if item.get("user_id") != user["user_id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    update = body.model_dump()
+    update.update({"status": "pending_review", "tags": clean_tags(body.tags), "updated_at": _now_iso()})
+    await db.services.update_one({"service_id": service_id}, {"$set": update})
+    return await db.services.find_one({"service_id": service_id}, {"_id": 0})
 
 
 # ============== ADS ==============
 @api_router.get("/ads")
 async def list_ads(slot: Optional[str] = None, limit: int = 6):
-    query = {}
+    query = {"$or": [{"status": {"$exists": False}}, {"status": {"$in": ["approved", "active"]}}]}
     if slot:
-        query["slot"] = slot
+        query = {"$and": [query, {"slot": slot}]}
     return await db.ads.find(query, {"_id": 0}).limit(limit).to_list(limit)
+
+
+@api_router.get("/business/ads")
+async def business_ads(user: dict = Depends(get_current_user)):
+    require_business(user)
+    return await db.ads.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+
+@api_router.post("/business/ads")
+async def create_business_ad(body: BusinessAdIn, user: dict = Depends(get_current_user)):
+    require_business(user)
+    now = _now_iso()
+    doc = body.model_dump()
+    doc.update({
+        "ad_id": f"ad_{uuid.uuid4().hex[:10]}",
+        "user_id": user["user_id"],
+        "status": "pending_review",
+        "color": "#2B4C5F",
+        "created_at": now,
+        "updated_at": now,
+    })
+    await db.ads.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/business/ads/{ad_id}")
+async def update_business_ad(ad_id: str, body: BusinessAdIn, user: dict = Depends(get_current_user)):
+    require_business(user)
+    item = await db.ads.find_one({"ad_id": ad_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    if item.get("user_id") != user["user_id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    update = body.model_dump()
+    update.update({"status": "pending_review", "updated_at": _now_iso()})
+    await db.ads.update_one({"ad_id": ad_id}, {"$set": update})
+    return await db.ads.find_one({"ad_id": ad_id}, {"_id": 0})
+
+
+# ============== BUSINESS SUBMISSION REVIEW ==============
+@api_router.get("/admin/business-submissions")
+async def admin_business_submissions(status: Optional[str] = "pending_review", user: dict = Depends(get_current_user)):
+    require_admin(user)
+    query = {}
+    if status and status != "all":
+        query["status"] = status
+    submissions = []
+    for submission_type, collection, id_field in (
+        ("jobs", db.jobs, "job_id"),
+        ("services", db.services, "service_id"),
+        ("ads", db.ads, "ad_id"),
+    ):
+        rows = await collection.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+        for row in rows:
+            if row.get("status") is None:
+                continue
+            row["submission_type"] = submission_type
+            row["submission_id"] = row.get(id_field)
+            submissions.append(row)
+    return sorted(submissions, key=lambda item: item.get("created_at", ""), reverse=True)
+
+
+@api_router.post("/admin/business-submissions/{submission_type}/{submission_id}/status")
+async def update_business_submission_status(
+    submission_type: str,
+    submission_id: str,
+    body: BusinessSubmissionStatusIn,
+    user: dict = Depends(get_current_user),
+):
+    require_admin(user)
+    status = body.status.strip().lower()
+    if status not in {"pending_review", "approved", "rejected", "inactive"}:
+        raise HTTPException(status_code=400, detail="Unsupported status")
+    collection, id_field = business_collection(submission_type)
+    item = await collection.find_one({id_field: submission_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    await collection.update_one(
+        {id_field: submission_id},
+        {"$set": {
+            "status": status,
+            "review_note": body.note.strip()[:500],
+            "reviewed_by": user["user_id"],
+            "reviewed_at": _now_iso(),
+            "updated_at": _now_iso(),
+        }},
+    )
+    return await collection.find_one({id_field: submission_id}, {"_id": 0})
 
 
 # ============== DAILY REFLECTION ==============
@@ -1169,6 +1408,13 @@ async def on_startup():
     await db.listings.create_index("city")
     await db.listings.create_index("zip_code")
     await db.listings.create_index("status")
+    await db.jobs.create_index("user_id")
+    await db.jobs.create_index("status")
+    await db.services.create_index("user_id")
+    await db.services.create_index("status")
+    await db.ads.create_index("user_id")
+    await db.ads.create_index("status")
+    await db.ads.create_index("slot")
     await db.listing_reports.create_index("listing_id")
     await db.listing_reports.create_index("status")
     await db.listing_reports.create_index("created_at")

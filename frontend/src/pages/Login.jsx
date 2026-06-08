@@ -16,8 +16,8 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
-      navigate("/dashboard");
+      const signedIn = await login(email, password);
+      navigate(signedIn.role === "business" ? "/business" : "/dashboard");
     } catch (err) {
       setError(formatApiError(err.response?.data?.detail) || err.message);
     } finally {

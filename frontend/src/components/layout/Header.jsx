@@ -17,6 +17,9 @@ export default function Header() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const isBusiness = user?.role === "business" || user?.role === "admin";
+  const dashboardLink = isBusiness ? "/business" : "/dashboard";
+  const dashboardLabel = isBusiness ? "Business" : "Dashboard";
 
   const onLogout = async () => {
     await logout();
@@ -47,12 +50,14 @@ export default function Header() {
         <div className="hidden xl:flex items-center gap-3 shrink-0">
           {user ? (
             <>
-              <Link to="/dashboard" className="sb-btn-outline inline-flex items-center gap-2 whitespace-nowrap" data-testid="header-dashboard-btn">
-                <LayoutDashboard size={16} strokeWidth={1.6}/> Dashboard
+              <Link to={dashboardLink} className="sb-btn-outline inline-flex items-center gap-2 whitespace-nowrap" data-testid="header-dashboard-btn">
+                <LayoutDashboard size={16} strokeWidth={1.6}/> {dashboardLabel}
               </Link>
-              <Link to="/post" className="sb-btn-primary inline-flex items-center gap-2 whitespace-nowrap" data-testid="header-post-listing-btn">
-                <Plus size={16} strokeWidth={2}/> Post a bed
-              </Link>
+              {isBusiness ? null : (
+                <Link to="/post" className="sb-btn-primary inline-flex items-center gap-2 whitespace-nowrap" data-testid="header-post-listing-btn">
+                  <Plus size={16} strokeWidth={2}/> Post a bed
+                </Link>
+              )}
               <button onClick={onLogout} className="text-[#5C6670] hover:text-[#C26D53] p-2" data-testid="header-logout-btn" aria-label="Logout">
                 <LogOut size={18} strokeWidth={1.6}/>
               </button>
@@ -81,8 +86,8 @@ export default function Header() {
             <div className="sb-divider my-1"/>
             {user ? (
               <>
-                <Link to="/dashboard" onClick={() => setOpen(false)} className="py-1.5">Dashboard</Link>
-                <Link to="/post" onClick={() => setOpen(false)} className="py-1.5 text-[#C26D53] font-semibold">Post a bed</Link>
+                <Link to={dashboardLink} onClick={() => setOpen(false)} className="py-1.5">{dashboardLabel}</Link>
+                {isBusiness ? null : <Link to="/post" onClick={() => setOpen(false)} className="py-1.5 text-[#C26D53] font-semibold">Post a bed</Link>}
                 <button onClick={() => { setOpen(false); onLogout(); }} className="py-1.5 text-left text-[#5C6670]">Logout</button>
               </>
             ) : (
