@@ -14,7 +14,7 @@ import httpx
 import cloudinary
 import cloudinary.uploader
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, status, UploadFile, File
 from starlette.middleware.cors import CORSMiddleware
@@ -169,6 +169,12 @@ class ListingReportIn(BaseModel):
     reason: str
     details: str = ""
     contact_email: Optional[EmailStr] = None
+
+
+class SavedSearchIn(BaseModel):
+    name: str
+    filters: Dict[str, Any] = Field(default_factory=dict)
+    alerts_enabled: bool = True
 
 
 # ============== CLOUDINARY IMAGE STORAGE ==============
@@ -501,6 +507,99 @@ async def report_listing(listing_id: str, body: ListingReportIn, request: Reques
         "updated_at": _now_iso(),
     })
     return {"ok": True, "report_id": report_id}
+
+
+SAVED_SEARCH_FILTER_KEYS = {
+    "q",
+    "city",
+    "state",
+    "region",
+    "gender",
+    "pets",
+    "insurance",
+    "max_price",
+}
+
+
+def clean_saved_search_filters(filters: Dict[str, Any]) -> Dict[str, Any]:
+    cleaned = {}
+    for key, value in filters.items():
+        if key not in SAVED_SEARCH_FILTER_KEYS:
+            continue
+        if value is None or value == "" or value == "any":
+            continue
+        if key in {"pets", "insurance"}:
+            if isinstance(value, str):
+                cleaned[key] = value.lower() in {"1", "true", "yes", "on"}
+            else:
+                cleaned[key] = bool(value)
+        elif key == "max_price":
+            try:
+                cleaned[key] = float(value)
+            except (TypeError, ValueError):
+                continue
+        else:
+            cleaned[key] = str(value).strip()
+    return cleaned
+
+
+@api_router.get("/saved-searches")
+async def list_saved_searches(user: dict = Depends(get_current_user)):
+    items = await db.saved_searches.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return items
+
+
+@api_router.post("/saved-searches")
+async def create_saved_search(body: SavedSearchIn, user: dict = Depends(get_current_user)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Search name is required")
+    filters = clean_saved_search_filters(body.filters)
+    if not filters:
+        raise HTTPException(status_code=400, detail="Choose at least one filter before saving")
+    now = _now_iso()
+    doc = {
+        "saved_search_id": f"ss_{uuid.uuid4().hex[:12]}",
+        "user_id": user["user_id"],
+        "name": name[:80],
+        "filters": filters,
+        "alerts_enabled": body.alerts_enabled,
+        "last_alerted_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.saved_searches.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/saved-searches/{saved_search_id}")
+async def update_saved_search(saved_search_id: str, body: SavedSearchIn, user: dict = Depends(get_current_user)):
+    item = await db.saved_searches.find_one({"saved_search_id": saved_search_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Saved search not found")
+    if item["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    name = body.name.strip()
+    filters = clean_saved_search_filters(body.filters)
+    if not name or not filters:
+        raise HTTPException(status_code=400, detail="Search name and filters are required")
+    await db.saved_searches.update_one(
+        {"saved_search_id": saved_search_id},
+        {"$set": {"name": name[:80], "filters": filters, "alerts_enabled": body.alerts_enabled, "updated_at": _now_iso()}},
+    )
+    return await db.saved_searches.find_one({"saved_search_id": saved_search_id}, {"_id": 0})
+
+
+@api_router.delete("/saved-searches/{saved_search_id}")
+async def delete_saved_search(saved_search_id: str, user: dict = Depends(get_current_user)):
+    item = await db.saved_searches.find_one({"saved_search_id": saved_search_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Saved search not found")
+    if item["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    await db.saved_searches.delete_one({"saved_search_id": saved_search_id})
+    return {"ok": True}
 
 
 @api_router.post("/listings")
@@ -836,6 +935,9 @@ async def on_startup():
     await db.listing_reports.create_index("listing_id")
     await db.listing_reports.create_index("status")
     await db.listing_reports.create_index("created_at")
+    await db.saved_searches.create_index("user_id")
+    await db.saved_searches.create_index("saved_search_id", unique=True)
+    await db.saved_searches.create_index("alerts_enabled")
     await db.login_attempts.create_index("identifier")
 
     # Admin seeding

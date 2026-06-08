@@ -170,6 +170,54 @@ class TestAuth:
         assert r.status_code == 401
 
 
+# -------------------- Saved searches --------------------
+class TestSavedSearches:
+    def test_saved_search_crud(self, manager_session):
+        payload = {
+            "name": f"OC under 225 {uuid.uuid4().hex[:6]}",
+            "filters": {
+                "region": "Orange County",
+                "state": "CA",
+                "gender": "men",
+                "max_price": "225",
+                "insurance": True,
+                "ignored": "nope",
+            },
+            "alerts_enabled": True,
+        }
+        r = manager_session.post(f"{API}/saved-searches", json=payload, timeout=30)
+        assert r.status_code == 200, r.text
+        created = r.json()
+        assert created["name"] == payload["name"]
+        assert created["alerts_enabled"] is True
+        assert created["filters"]["max_price"] == 225
+        assert "ignored" not in created["filters"]
+        sid = created["saved_search_id"]
+
+        r = manager_session.get(f"{API}/saved-searches", timeout=30)
+        assert r.status_code == 200
+        assert any(item["saved_search_id"] == sid for item in r.json())
+
+        updated_payload = {**payload, "name": "OC men alerts off", "alerts_enabled": False}
+        r = manager_session.put(f"{API}/saved-searches/{sid}", json=updated_payload, timeout=30)
+        assert r.status_code == 200
+        assert r.json()["alerts_enabled"] is False
+        assert r.json()["name"] == "OC men alerts off"
+
+        r = manager_session.delete(f"{API}/saved-searches/{sid}", timeout=30)
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+    def test_saved_search_requires_auth_and_filters(self):
+        r = requests.get(f"{API}/saved-searches", timeout=30)
+        assert r.status_code == 401
+
+        s = requests.Session()
+        s.post(f"{API}/auth/login", json=MANAGER, timeout=30)
+        r = s.post(f"{API}/saved-searches", json={"name": "empty", "filters": {}, "alerts_enabled": True}, timeout=30)
+        assert r.status_code == 400
+
+
 # -------------------- Manager listings + soft archive --------------------
 class TestManagerListings:
     def test_listings_mine_returns_15(self, manager_session):
