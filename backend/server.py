@@ -5,14 +5,17 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 import os
+import asyncio
 import uuid
 import logging
 import secrets
+import smtplib
 import bcrypt
 import jwt
 import httpx
 import cloudinary
 import cloudinary.uploader
+from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -408,8 +411,7 @@ async def _expire_stale():
     )
 
 
-@api_router.get("/listings")
-async def list_listings(
+def build_listing_query(
     city: Optional[str] = None,
     state: Optional[str] = None,
     region: Optional[str] = None,
@@ -419,8 +421,8 @@ async def list_listings(
     insurance: Optional[bool] = None,
     max_price: Optional[float] = None,
     q: Optional[str] = None,
+    created_after: Optional[str] = None,
 ):
-    await _expire_stale()
     and_clauses = [{"status": "active"}]
     if city:
         and_clauses.append({"city": {"$regex": city, "$options": "i"}})
@@ -451,7 +453,25 @@ async def list_listings(
             {"meeting_requirements": {"$regex": q, "$options": "i"}},
             {"zip_code": {"$regex": f"^{q}", "$options": "i"}},
         ]})
-    query = {"$and": and_clauses} if len(and_clauses) > 1 else and_clauses[0]
+    if created_after:
+        and_clauses.append({"created_at": {"$gt": created_after}})
+    return {"$and": and_clauses} if len(and_clauses) > 1 else and_clauses[0]
+
+
+@api_router.get("/listings")
+async def list_listings(
+    city: Optional[str] = None,
+    state: Optional[str] = None,
+    region: Optional[str] = None,
+    zip_code: Optional[str] = None,
+    gender: Optional[str] = None,
+    pets: Optional[bool] = None,
+    insurance: Optional[bool] = None,
+    max_price: Optional[float] = None,
+    q: Optional[str] = None,
+):
+    await _expire_stale()
+    query = build_listing_query(city, state, region, zip_code, gender, pets, insurance, max_price, q)
     items = await db.listings.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
 
@@ -530,9 +550,11 @@ def clean_saved_search_filters(filters: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if key in {"pets", "insurance"}:
             if isinstance(value, str):
-                cleaned[key] = value.lower() in {"1", "true", "yes", "on"}
+                parsed = value.lower() in {"1", "true", "yes", "on"}
             else:
-                cleaned[key] = bool(value)
+                parsed = bool(value)
+            if parsed:
+                cleaned[key] = True
         elif key == "max_price":
             try:
                 cleaned[key] = float(value)
@@ -666,6 +688,221 @@ async def reactivate_listing(listing_id: str, user: dict = Depends(get_current_u
         {"$set": {"status": "active", "created_at": now, "updated_at": now, "expires_at": _expiry_iso()}},
     )
     return {"ok": True, "status": "active", "expires_at": _expiry_iso()}
+
+
+# ============== NOTIFICATIONS ==============
+NOTIFICATION_INTERVAL_SECONDS = int(os.environ.get("NOTIFICATION_INTERVAL_SECONDS", "21600"))  # 6 hours
+
+
+def notifications_enabled() -> bool:
+    if os.environ.get("NOTIFICATIONS_ENABLED", "true").lower() in {"0", "false", "no", "off"}:
+        return False
+    return all([
+        os.environ.get("SMTP_HOST"),
+        os.environ.get("SMTP_USERNAME"),
+        os.environ.get("SMTP_PASSWORD"),
+        os.environ.get("SMTP_FROM_EMAIL"),
+    ])
+
+
+def frontend_url() -> str:
+    return os.environ.get("FRONTEND_URL") or "https://soberboard.com"
+
+
+def listing_url(listing_id: str) -> str:
+    return f"{frontend_url().rstrip('/')}/beds/{listing_id}"
+
+
+def beds_url(filters: Optional[Dict[str, Any]] = None) -> str:
+    base = f"{frontend_url().rstrip('/')}/beds"
+    if not filters:
+        return base
+    from urllib.parse import urlencode
+    params = {}
+    for key, value in filters.items():
+        if value is True:
+            params[key] = "true"
+        elif value:
+            params[key] = str(value)
+    return f"{base}?{urlencode(params)}" if params else base
+
+
+def send_email_sync(to_email: str, subject: str, body: str):
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() not in {"0", "false", "no", "off"}
+    from_email = os.environ["SMTP_FROM_EMAIL"]
+    from_name = os.environ.get("SMTP_FROM_NAME", "SoberBoard")
+
+    message = EmailMessage()
+    message["From"] = f"{from_name} <{from_email}>"
+    message["To"] = to_email
+    message["Subject"] = subject
+    message.set_content(body)
+
+    with smtplib.SMTP(os.environ["SMTP_HOST"], port, timeout=20) as smtp:
+        if use_tls:
+            smtp.starttls()
+        smtp.login(os.environ["SMTP_USERNAME"], os.environ["SMTP_PASSWORD"])
+        smtp.send_message(message)
+
+
+async def send_email(to_email: str, subject: str, body: str) -> bool:
+    if not notifications_enabled():
+        return False
+    try:
+        await asyncio.to_thread(send_email_sync, to_email, subject, body)
+        return True
+    except Exception as e:
+        logging.getLogger("soberboard").warning(f"Email send failed to {to_email}: {e}")
+        return False
+
+
+def listing_price(listing: dict) -> str:
+    if listing.get("price_weekly"):
+        return f"${int(listing['price_weekly'])}/week"
+    if listing.get("price_monthly"):
+        return f"${int(listing['price_monthly'])}/month"
+    return "Ask manager"
+
+
+def describe_saved_filters_for_email(filters: Dict[str, Any]) -> str:
+    parts = []
+    if filters.get("region"):
+        parts.append(f"{filters['region']}{', ' + filters['state'] if filters.get('state') else ''}")
+    elif filters.get("city"):
+        parts.append(filters["city"])
+    if filters.get("q"):
+        parts.append(f"search: {filters['q']}")
+    if filters.get("gender"):
+        parts.append(filters["gender"])
+    if filters.get("max_price"):
+        parts.append(f"under ${int(float(filters['max_price']))}/week")
+    if filters.get("insurance"):
+        parts.append("insurance accepted")
+    if filters.get("pets"):
+        parts.append("pets allowed")
+    return " · ".join(parts) if parts else "your saved search"
+
+
+async def run_saved_search_alerts() -> int:
+    await _expire_stale()
+    sent = 0
+    now = _now_iso()
+    cursor = db.saved_searches.find({"alerts_enabled": True}, {"_id": 0})
+    async for saved in cursor:
+        user = await db.users.find_one({"user_id": saved["user_id"]}, {"_id": 0, "email": 1, "name": 1})
+        if not user or not user.get("email"):
+            continue
+
+        filters = saved.get("filters", {})
+        since = saved.get("last_checked_at") or saved.get("created_at") or now
+        query = build_listing_query(
+            city=filters.get("city"),
+            state=filters.get("state"),
+            region=filters.get("region"),
+            gender=filters.get("gender"),
+            pets=filters.get("pets"),
+            insurance=filters.get("insurance"),
+            max_price=filters.get("max_price"),
+            q=filters.get("q"),
+            created_after=since,
+        )
+        matches = await db.listings.find(query, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
+        update = {"last_checked_at": now, "updated_at": now}
+        if matches:
+            lines = [
+                f"New SoberBoard beds matched: {saved.get('name', 'Saved search')}",
+                "",
+                f"Search: {describe_saved_filters_for_email(filters)}",
+                "",
+            ]
+            for listing in matches:
+                lines.extend([
+                    f"- {listing['house_name']} in {listing['city']}, {listing.get('state', '')}",
+                    f"  {listing.get('beds_open', 0)} beds open · {listing_price(listing)}",
+                    f"  Manager: {listing.get('manager_name', 'House manager')} · {listing.get('manager_phone', 'phone not listed')}",
+                    f"  {listing_url(listing['listing_id'])}",
+                    "",
+                ])
+            lines.extend([
+                f"View this search: {beds_url(filters)}",
+                "",
+                "You can turn alerts off from your saved search on SoberBoard.",
+            ])
+            if await send_email(user["email"], f"SoberBoard: new beds for {saved.get('name', 'your saved search')}", "\n".join(lines)):
+                update["last_alerted_at"] = now
+                sent += 1
+        await db.saved_searches.update_one({"saved_search_id": saved["saved_search_id"]}, {"$set": update})
+    return sent
+
+
+async def run_listing_expiration_reminders() -> int:
+    now_dt = datetime.now(timezone.utc)
+    sent = 0
+    cursor = db.listings.find({"status": "active"}, {"_id": 0})
+    async for listing in cursor:
+        expires_raw = listing.get("expires_at")
+        if not expires_raw:
+            continue
+        try:
+            expires_at = datetime.fromisoformat(expires_raw)
+        except ValueError:
+            continue
+        seconds_left = (expires_at - now_dt).total_seconds()
+        if seconds_left <= 0:
+            continue
+
+        reminder_key = None
+        reminder_label = None
+        if seconds_left <= 86400 and not listing.get("reminder_1d_sent_at"):
+            reminder_key = "reminder_1d_sent_at"
+            reminder_label = "1 day"
+        elif seconds_left <= 3 * 86400 and not listing.get("reminder_3d_sent_at"):
+            reminder_key = "reminder_3d_sent_at"
+            reminder_label = "3 days"
+        if not reminder_key:
+            continue
+
+        owner = await db.users.find_one({"user_id": listing["user_id"]}, {"_id": 0, "email": 1, "name": 1})
+        if not owner or not owner.get("email"):
+            continue
+        body = "\n".join([
+            f"Hi {owner.get('name', 'there')},",
+            "",
+            f"Your SoberBoard listing for {listing['house_name']} expires in about {reminder_label}.",
+            "",
+            "If the bed is still open, reactivate it from your dashboard so it stays visible.",
+            "If it is filled, you can leave it inactive and reuse the listing later.",
+            "",
+            f"Listing: {listing_url(listing['listing_id'])}",
+            f"Dashboard: {frontend_url().rstrip('/')}/dashboard",
+        ])
+        if await send_email(owner["email"], f"SoberBoard reminder: {listing['house_name']} expires soon", body):
+            await db.listings.update_one(
+                {"listing_id": listing["listing_id"]},
+                {"$set": {reminder_key: _now_iso()}},
+            )
+            sent += 1
+    return sent
+
+
+async def run_notifications_once():
+    if not notifications_enabled():
+        return {"enabled": False, "saved_search_alerts": 0, "expiration_reminders": 0}
+    saved_sent = await run_saved_search_alerts()
+    reminder_sent = await run_listing_expiration_reminders()
+    return {"enabled": True, "saved_search_alerts": saved_sent, "expiration_reminders": reminder_sent}
+
+
+async def notification_loop():
+    while True:
+        try:
+            result = await run_notifications_once()
+            if result["enabled"]:
+                logging.getLogger("soberboard").info(f"Notification run complete: {result}")
+        except Exception as e:
+            logging.getLogger("soberboard").warning(f"Notification loop failed: {e}")
+        await asyncio.sleep(NOTIFICATION_INTERVAL_SECONDS)
 
 
 # ============== JOBS ==============
@@ -938,6 +1175,10 @@ async def on_startup():
     await db.saved_searches.create_index("user_id")
     await db.saved_searches.create_index("saved_search_id", unique=True)
     await db.saved_searches.create_index("alerts_enabled")
+    await db.saved_searches.create_index("last_checked_at")
+    await db.listings.create_index("expires_at")
+    await db.listings.create_index("reminder_3d_sent_at")
+    await db.listings.create_index("reminder_1d_sent_at")
     await db.login_attempts.create_index("identifier")
 
     # Admin seeding
@@ -1044,9 +1285,15 @@ async def on_startup():
         for a in SEED_ADS:
             await db.ads.insert_one(a)
 
+    if not getattr(app.state, "notification_task", None):
+        app.state.notification_task = asyncio.create_task(notification_loop())
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    task = getattr(app.state, "notification_task", None)
+    if task:
+        task.cancel()
     client.close()
 
 

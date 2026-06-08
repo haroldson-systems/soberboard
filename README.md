@@ -91,6 +91,25 @@ uvicorn server:app --reload --port 8001
 
 The backend serves all routes under `/api`. It seeds 24 demo listings, 10 jobs, 10 services, and 6 sponsored ads on first boot. Demo listings auto-refresh to a 365-day expiry on every boot so the showcase never goes empty; real operator listings auto-expire after **7 days** as designed.
 
+### Email notifications
+
+Saved-search alerts and listing-expiration reminders are dormant until SMTP is configured. Add these backend env vars when the SoberBoard mailbox is ready:
+
+```bash
+NOTIFICATIONS_ENABLED=true
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USE_TLS=true
+SMTP_USERNAME=support@soberboard.com
+SMTP_PASSWORD=...
+SMTP_FROM_EMAIL=support@soberboard.com
+SMTP_FROM_NAME=SoberBoard
+FRONTEND_URL=https://soberboard.com
+NOTIFICATION_INTERVAL_SECONDS=21600
+```
+
+If SMTP settings are missing, the worker starts safely but does not send email.
+
 ### Frontend
 
 ```bash
